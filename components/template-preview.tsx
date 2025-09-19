@@ -1,0 +1,458 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Handlebars, { type HelperOptions } from 'handlebars';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  Eye,
+  Smartphone,
+  Monitor,
+  Tablet,
+  RefreshCw,
+  ExternalLink,
+  AlertCircle,
+  CheckCircle,
+} from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+
+interface ParsedTestData {
+  [key: string]: string | number | boolean | ParsedTestData;
+}
+
+interface TemplatePreviewProps {
+  htmlContent: string;
+  subject: string;
+  testData: ParsedTestData;
+}
+
+interface EnvState {
+  values: Record<string, string>;
+  loading: boolean;
+  error: string;
+  keys: string[];
+}
+
+type ViewMode = 'desktop' | 'tablet' | 'mobile';
+
+const ENV_PLACEHOLDER_REGEX =
+  /\{\{\s*env\s+(?:(?:"([^"]+)")|(?:'([^']+)')|([^\s}]+))\s*\}\}/g;
+
+const extractEnvKeys = (html: string): string[] => {
+  const keys = new Set<string>();
+  let match;
+  const regex = new RegExp(ENV_PLACEHOLDER_REGEX.source, 'g');
+
+  while ((match = regex.exec(html)) !== null) {
+    const key = match[1] || match[2] || match[3];
+    if (key?.trim()) {
+      keys.add(key.trim());
+    }
+  }
+
+  return Array.from(keys);
+};
+
+const equalsHelper = function (
+  this: unknown,
+  a: unknown,
+  b: unknown,
+  options?: HelperOptions
+) {
+  const result = a === b;
+  if (options && typeof options.fn === 'function') {
+    return result ? options.fn(this) : options.inverse(this);
+  }
+  return result;
+};
+
+const notEqualsHelper = function (
+  this: unknown,
+  a: unknown,
+  b: unknown,
+  options?: HelperOptions
+) {
+  const result = a !== b;
+  if (options && typeof options.fn === 'function') {
+    return result ? options.fn(this) : options.inverse(this);
+  }
+  return result;
+};
+
+const buildDocumentMarkup = (html: string): string => {
+  const trimmed = html.trim();
+
+  if (!trimmed) {
+    return `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <style>
+      body { 
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; 
+        padding: 48px; 
+        color: #374151;
+        background: #f9fafb;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        margin: 0;
+      }
+      .empty-state {
+        text-align: center;
+        color: #6b7280;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="empty-state">
+      <h3>No content to preview</h3>
+      <p>This template appears to be empty.</p>
+    </div>
+  </body>
+</html>`;
+  }
+
+  if (/^<!DOCTYPE html>/i.test(trimmed) || /^<html[\s>]/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  return `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { 
+        margin: 0; 
+        background-color: #f8fafc; 
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+      }
+    </style>
+  </head>
+  <body>
+    ${trimmed}
+  </body>
+</html>`;
+};
+
+const VIEWPORT_CONFIG = {
+  desktop: { width: 'max-w-[1200px]', label: 'Desktop', icon: Monitor },
+  tablet: { width: 'max-w-[768px]', label: 'Tablet', icon: Tablet },
+  mobile: { width: 'max-w-[390px]', label: 'Mobile', icon: Smartphone },
+} as const;
+
+export function TemplatePreview({
+  htmlContent,
+  subject,
+  testData,
+}: TemplatePreviewProps) {
+  const [renderedHTML, setRenderedHTML] = useState('');
+  const [viewMode, setViewMode] = useState<ViewMode>('desktop');
+  const [compilationError, setCompilationError] = useState('');
+
+  const [envState, setEnvState] = useState<EnvState>({
+    values: {},
+    loading: false,
+    error: '',
+    keys: [],
+  });
+
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const fetchedEnvKeysRef = useRef<Set<string>>(new Set());
+
+  const envKeys = useMemo(() => extractEnvKeys(htmlContent), [htmlContent]);
+
+  const compiledTemplate = useMemo(() => {
+    try {
+      setCompilationError('');
+      return Handlebars.compile(htmlContent);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Template compilation failed';
+      setCompilationError(errorMessage);
+      console.error('Failed to compile template:', error);
+      return null;
+    }
+  }, [htmlContent]);
+
+  // Reset env state when keys change
+  useEffect(() => {
+    if (JSON.stringify(envKeys) !== JSON.stringify(envState.keys)) {
+      fetchedEnvKeysRef.current = new Set();
+      setEnvState((prev) => ({
+        ...prev,
+        keys: envKeys,
+        error: '',
+        values: envKeys.length === 0 ? {} : prev.values,
+      }));
+    }
+  }, [envKeys, envState.keys]);
+
+  const fetchEnvValues = useCallback(async (keys: string[]) => {
+    if (!keys.length) return;
+
+    setEnvState((prev) => ({ ...prev, loading: true, error: '' }));
+
+    try {
+      const response = await fetch('/api/sendgrid/env', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keys }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to resolve environment variables');
+      }
+
+      const data = await response.json();
+
+      setEnvState((prev) => ({
+        ...prev,
+        loading: false,
+        values: { ...prev.values, ...(data?.result || {}) },
+        error:
+          data?.rejected?.length > 0
+            ? `Some variables unavailable: ${data.rejected.join(', ')}`
+            : '',
+      }));
+
+      keys.forEach((key) => fetchedEnvKeysRef.current.add(key));
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Environment fetch failed';
+      setEnvState((prev) => ({
+        ...prev,
+        loading: false,
+        error: errorMessage,
+      }));
+    }
+  }, []);
+
+  // Fetch missing environment variables
+  useEffect(() => {
+    const keysToFetch = envKeys.filter(
+      (key) => !fetchedEnvKeysRef.current.has(key)
+    );
+    if (keysToFetch.length > 0) {
+      void fetchEnvValues(keysToFetch);
+    }
+  }, [envKeys, fetchEnvValues]);
+
+  const context = useMemo(() => {
+    const base = { ...testData };
+
+    // Handle env values - ensure they're all strings
+    const existingEnv =
+      base.env && typeof base.env === 'object'
+        ? Object.fromEntries(
+            Object.entries(base.env as Record<string, unknown>).map(
+              ([key, value]) => [
+                key,
+                typeof value === 'string' ? value : String(value || ''),
+              ]
+            )
+          )
+        : {};
+
+    base.env = { ...envState.values, ...existingEnv };
+    return base;
+  }, [testData, envState.values]);
+
+  const resolveEnvValue = useCallback(
+    (rawKey: unknown): string => {
+      if (typeof rawKey !== 'string') return '';
+
+      const key = rawKey.trim();
+      if (!key) return '';
+
+      const envSource = context.env as Record<string, unknown> | undefined;
+      return envSource && envSource[key] !== undefined
+        ? String(envSource[key] ?? '')
+        : '';
+    },
+    [context]
+  );
+
+  const refreshPreview = useCallback(
+    (options?: { reloadEnv?: boolean }) => {
+      if (options?.reloadEnv && envKeys.length) {
+        fetchedEnvKeysRef.current = new Set();
+        setEnvState((prev) => ({ ...prev, values: {} }));
+        void fetchEnvValues(envKeys);
+      }
+
+      if (!compiledTemplate) {
+        setRenderedHTML(htmlContent);
+        return;
+      }
+
+      try {
+        const html = compiledTemplate(context, {
+          helpers: {
+            env: (key: unknown) => resolveEnvValue(key),
+            equals: equalsHelper,
+            notEquals: notEqualsHelper,
+          },
+        });
+        setRenderedHTML(html);
+      } catch (error) {
+        console.error('Failed to render template:', error);
+        setRenderedHTML(htmlContent);
+      }
+    },
+    [
+      compiledTemplate,
+      context,
+      envKeys,
+      fetchEnvValues,
+      htmlContent,
+      resolveEnvValue,
+    ]
+  );
+
+  useEffect(() => {
+    refreshPreview();
+  }, [refreshPreview]);
+
+  const finalMarkup = useMemo(
+    () => buildDocumentMarkup(renderedHTML || htmlContent),
+    [renderedHTML, htmlContent]
+  );
+
+  useEffect(() => {
+    if (iframeRef.current) {
+      iframeRef.current.srcdoc = finalMarkup;
+    }
+  }, [finalMarkup]);
+
+  const openInNewTab = useCallback(() => {
+    const blob = new Blob([finalMarkup], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }, [finalMarkup]);
+
+  const currentViewport = VIEWPORT_CONFIG[viewMode];
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden">
+      {/* Header Controls */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-card/50 px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 mb-1">
+            <Eye className="h-4 w-4 text-primary" />
+            <span className="font-medium text-sm">Live Preview</span>
+            {compilationError && (
+              <Badge variant="destructive" className="text-xs">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                Error
+              </Badge>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            {subject && <span className="truncate">Subject: {subject}</span>}
+            {envKeys.length > 0 && (
+              <div className="flex items-center gap-1">
+                {envState.loading ? (
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                ) : envState.error ? (
+                  <AlertCircle className="h-3 w-3 text-destructive" />
+                ) : (
+                  <CheckCircle className="h-3 w-3 text-green-600" />
+                )}
+                <span>Env vars: {envKeys.length}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Viewport Controls */}
+          <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-background p-1">
+            {Object.entries(VIEWPORT_CONFIG).map(([mode, config]) => {
+              const Icon = config.icon;
+              return (
+                <Button
+                  key={mode}
+                  variant={viewMode === mode ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode(mode as ViewMode)}
+                  className="h-8 px-2"
+                  title={config.label}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span className="ml-1 hidden sm:inline text-xs">
+                    {config.label}
+                  </span>
+                </Button>
+              );
+            })}
+          </div>
+
+          {/* Action Buttons */}
+          <Button variant="outline" size="sm" onClick={openInNewTab}>
+            <ExternalLink className="h-4 w-4" />
+            <span className="ml-1 hidden sm:inline">Open</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refreshPreview({ reloadEnv: true })}
+            disabled={envState.loading}
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${envState.loading ? 'animate-spin' : ''}`}
+            />
+            <span className="ml-1 hidden sm:inline">Refresh</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* Error Alerts */}
+      {compilationError && (
+        <Alert variant="destructive" className="mx-4 mt-2">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="text-sm">
+            Template compilation error: {compilationError}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {envState.error && (
+        <Alert variant="destructive" className="mx-4 mt-2">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="text-sm">
+            {envState.error}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Preview Content */}
+      <div className="flex-1 overflow-hidden bg-muted/20 p-4">
+        <Card className="flex h-full flex-col border-none bg-transparent shadow-none">
+          <CardContent className="flex h-full flex-col overflow-hidden p-0">
+            <div className="flex h-full w-full justify-center overflow-hidden rounded-xl border border-border/70 bg-background shadow-lg">
+              <div
+                className={`flex h-full w-full justify-center overflow-auto p-4 ${currentViewport.width}`}
+              >
+                <div className="flex h-full w-full max-w-full items-stretch justify-center overflow-hidden rounded-lg border border-border bg-white shadow-sm">
+                  <iframe
+                    ref={iframeRef}
+                    className="h-full w-full border-0"
+                    title="Email Template Preview"
+                    sandbox="allow-same-origin allow-forms allow-popups"
+                  />
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
