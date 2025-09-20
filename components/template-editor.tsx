@@ -161,9 +161,7 @@ export function TemplateEditor({ template, apiKey }: TemplateEditorProps) {
 
   const handleTranslationSelect = useCallback(
     (translation: TemplateTranslation) => {
-      setSelectedTranslation((current) =>
-        current?.id === translation.id ? null : translation
-      );
+      setSelectedTranslation(translation);
       setActiveTab('preview');
     },
     []

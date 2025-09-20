@@ -145,6 +145,14 @@ export const dbService = {
         .where(eq(templateTranslations.taskId, taskId));
     },
 
+    async findById(id: string): Promise<TemplateTranslation | undefined> {
+      const [translation] = await db
+        .select()
+        .from(templateTranslations)
+        .where(eq(templateTranslations.id, id));
+      return translation;
+    },
+
     async findByTemplateAndLanguage(
       templateId: string,
       languageCode: string
@@ -186,6 +194,59 @@ export const dbService = {
           updatedAt: new Date(),
         })
         .where(eq(templateTranslations.id, id));
+    },
+
+    async requestRetranslate(
+      id: string,
+      reason: string
+    ): Promise<{ translation: TemplateTranslation; previousStatus: TemplateTranslation['status'] } | undefined> {
+      const existing = await this.findById(id);
+      if (!existing) {
+        return undefined;
+      }
+
+      const previousStatus = existing.status;
+      const now = new Date();
+
+      const updateResult = await db
+        .update(templateTranslations)
+        .set({
+          status: 'processing',
+          errorMessage: null,
+          retranslateReason: reason,
+          retranslateAttempts:
+            sql`${templateTranslations.retranslateAttempts} + 1`,
+          updatedAt: now,
+        })
+        .where(eq(templateTranslations.id, id))
+        .returning();
+
+      const updated = updateResult[0];
+      if (!updated) {
+        return undefined;
+      }
+
+      if (previousStatus === 'completed') {
+        await db
+          .update(translationTasks)
+          .set({
+            completedLanguages:
+              sql`GREATEST(${translationTasks.completedLanguages} - 1, 0)`,
+            updatedAt: now,
+          })
+          .where(eq(translationTasks.id, updated.taskId));
+      } else if (previousStatus === 'failed') {
+        await db
+          .update(translationTasks)
+          .set({
+            failedLanguages:
+              sql`GREATEST(${translationTasks.failedLanguages} - 1, 0)`,
+            updatedAt: now,
+          })
+          .where(eq(translationTasks.id, updated.taskId));
+      }
+
+      return { translation: updated, previousStatus };
     },
   },
 };

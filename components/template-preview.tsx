@@ -187,19 +187,25 @@ export function TemplatePreview({
     ? translationLanguage?.nativeName ?? translationLanguageName
     : undefined;
 
+  const isTranslationAvailable = Boolean(
+    translation?.status === 'completed' &&
+      translation.translatedHtml &&
+      translation.translatedHtml.trim().length > 0
+  );
+
   useEffect(() => {
-    if (translation?.id) {
-      setContentMode(translation.translatedHtml ? 'translation' : 'original');
+    if (translation?.id && isTranslationAvailable) {
+      setContentMode('translation');
     } else {
       setContentMode('original');
     }
-  }, [translation?.id, translation?.translatedHtml]);
-
-  const isTranslationAvailable = Boolean(
-    translation?.translatedHtml && translation.translatedHtml.trim().length > 0
-  );
+  }, [translation?.id, isTranslationAvailable]);
 
   const showTranslation = contentMode === 'translation' && isTranslationAvailable;
+
+  const translationInProgress = Boolean(
+    translation && translation.status !== 'completed'
+  );
 
   const activeHtml = useMemo(() => {
     if (showTranslation && translation?.translatedHtml) {
@@ -428,6 +434,11 @@ export function TemplatePreview({
                 {translationLanguageNativeName || translationLabel}
               </span>
             )}
+            {translation?.retranslateReason && (
+              <span className="flex items-center gap-1 text-muted-foreground/80">
+                Feedback: {translation.retranslateReason}
+              </span>
+            )}
             {envKeys.length > 0 && (
               <div className="flex items-center gap-1">
                 {envState.loading ? (
@@ -545,12 +556,12 @@ export function TemplatePreview({
         </Alert>
       )}
 
-      {translation && !isTranslationAvailable && (
+      {translation && translationInProgress && (
         <Alert variant="default" className="mx-4 mt-2">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription className="text-sm">
-            This translation is still processing. The original content is shown
-            until translated HTML is available.
+            Retranslation in progress. Showing the most recent version until
+            updated copy is ready.
           </AlertDescription>
         </Alert>
       )}

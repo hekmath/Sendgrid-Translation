@@ -60,19 +60,25 @@ export function CodeEditor({
     ? translationLanguage?.nativeName ?? translationLanguageName
     : undefined;
 
+  const isTranslationAvailable = Boolean(
+    translation?.status === 'completed' &&
+      translation.translatedHtml &&
+      translation.translatedHtml.trim().length > 0
+  );
+
   useEffect(() => {
-    if (translation?.id) {
-      setContentMode(translation.translatedHtml ? 'translation' : 'original');
+    if (translation?.id && isTranslationAvailable) {
+      setContentMode('translation');
     } else {
       setContentMode('original');
     }
-  }, [translation?.id, translation?.translatedHtml]);
-
-  const isTranslationAvailable = Boolean(
-    translation?.translatedHtml && translation.translatedHtml.trim().length > 0
-  );
+  }, [translation?.id, isTranslationAvailable]);
 
   const showTranslation = contentMode === 'translation' && isTranslationAvailable;
+
+  const translationInProgress = Boolean(
+    translation && translation.status !== 'completed'
+  );
 
   const activeHtml = useMemo(() => {
     if (showTranslation && translation?.translatedHtml) {
@@ -330,9 +336,16 @@ export function CodeEditor({
           </div>
         )}
 
-        {translation && !isTranslationAvailable && (
+        {translation?.retranslateReason && (
+          <div className="mb-3 rounded-lg border border-dashed border-primary/30 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+            Last feedback: {translation.retranslateReason}
+          </div>
+        )}
+
+        {translation && translationInProgress && (
           <div className="mb-3 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-            Translation HTML is still processing. Showing original code for now.
+            Retranslation in progress. Showing the most recent version until
+            updated code is ready.
           </div>
         )}
 

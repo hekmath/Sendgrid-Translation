@@ -13,6 +13,15 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import {
   Languages,
   Play,
   RefreshCw,
@@ -67,6 +76,9 @@ export function TranslationPanel({
     []
   );
   const queryClient = useQueryClient();
+  const [retranslateTarget, setRetranslateTarget] =
+    useState<TemplateTranslation | null>(null);
+  const [retranslateReason, setRetranslateReason] = useState('');
 
   // Fetch translation data
   const {
@@ -117,6 +129,33 @@ export function TranslationPanel({
     },
     onError: (error) => {
       toast.error(`Failed to start translation: ${error.message}`);
+    },
+  });
+
+  const retranslateMutation = useMutation({
+    mutationFn: async (variables: { translationId: string; reason: string }) => {
+      const response = await fetch('/api/translations/retranslate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(variables),
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        const message = body?.error ?? 'Failed to request retranslation';
+        throw new Error(message);
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      toast.success('Retranslation requested');
+      setRetranslateReason('');
+      setRetranslateTarget(null);
+      queryClient.invalidateQueries({ queryKey: ['translations', template.id] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
     },
   });
 
@@ -178,10 +217,10 @@ export function TranslationPanel({
     [translationData?.translations, activeVersion.id]
   );
 
-  const completedTranslations = useMemo(
+  const availableTranslations = useMemo(
     () =>
       translationsForVersion.filter((translation) =>
-        translation.status === 'completed'
+        ['completed', 'processing', 'pending'].includes(translation.status)
       ),
     [translationsForVersion]
   );
@@ -206,6 +245,17 @@ export function TranslationPanel({
       toast.error('Failed to copy translation HTML');
     }
   }, []);
+
+  const canSubmitRetranslate = retranslateReason.trim().length >= 5;
+
+  const handleRetranslateSubmit = useCallback(() => {
+    if (!retranslateTarget || !canSubmitRetranslate) return;
+
+    retranslateMutation.mutate({
+      translationId: retranslateTarget.id,
+      reason: retranslateReason.trim(),
+    });
+  }, [retranslateTarget, canSubmitRetranslate, retranslateMutation, retranslateReason]);
 
   return (
     <Card className="h-full">
@@ -296,56 +346,117 @@ export function TranslationPanel({
           </div>
         )}
 
-        {/* Completed Translations */}
-        {completedTranslations.length > 0 && (
+        {/* Available / In-Progress Translations */}
+        {availableTranslations.length > 0 && (
           <div className="space-y-3">
-            <h4 className="text-sm font-medium">Available Translations</h4>
+            <h4 className="text-sm font-medium">Translations</h4>
             <div className="space-y-2">
-              {completedTranslations.map((translation) => {
+              {availableTranslations.map((translation) => {
                 const language = getLanguageByCode(translation.languageCode);
                 const isSelected = selectedTranslationId === translation.id;
+                const isInProgress = ['processing', 'pending'].includes(
+                  translation.status
+                );
+                const StatusIcon = isInProgress ? RefreshCw : CheckCircle;
+
                 return (
                   <div
                     key={translation.id}
-                    className={`flex items-center justify-between p-3 border rounded-lg transition-colors ${
+                    className={`flex flex-col gap-3 rounded-lg border p-3 transition-colors ${
                       isSelected
                         ? 'border-primary/60 bg-primary/5 shadow-sm'
-                        : 'hover:bg-accent/50'
+                        : 'hover:bg-accent/40'
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                      <div>
-                        <div className="font-medium text-sm">
-                          {language?.name || translation.languageCode}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {language?.nativeName}
-                          {isSelected && (
-                            <Badge variant="secondary" className="ml-2 text-[10px]">
-                              Previewing
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-3">
+                          <StatusIcon
+                            className={`h-4 w-4 ${
+                              isInProgress
+                                ? 'text-blue-600 animate-spin'
+                                : 'text-green-600'
+                            }`}
+                          />
+                        <div>
+                          <div className="font-medium text-sm">
+                            {language?.name || translation.languageCode}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <span>{language?.nativeName}</span>
+                            <Badge
+                              variant={
+                                translation.status === 'completed'
+                                  ? 'secondary'
+                                  : 'outline'
+                              }
+                              className="capitalize"
+                            >
+                              {translation.status === 'pending'
+                                ? 'queued'
+                                : translation.status}
                             </Badge>
-                          )}
+                            {translation.retranslateAttempts > 0 && (
+                              <span>
+                                {translation.retranslateAttempts} retranslate
+                                {translation.retranslateAttempts > 1 ? 's' : ''}
+                              </span>
+                            )}
+                            {isSelected && (
+                              <Badge variant="secondary" className="text-[10px]">
+                                Previewing
+                              </Badge>
+                            )}
+                          </div>
                         </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant={isSelected ? 'default' : 'ghost'}
+                          size="sm"
+                          onClick={() => onTranslationSelect?.(translation)}
+                          disabled={isInProgress || !translation.translatedHtml}
+                          title={
+                            isInProgress
+                              ? 'Translation still processing'
+                              : 'Preview translation'
+                          }
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleCopyHtml(translation)}
+                          disabled={!translation.translatedHtml}
+                          title="Copy translated HTML"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setRetranslateTarget(translation);
+                            setRetranslateReason(translation.retranslateReason ?? '');
+                          }}
+                          disabled={isInProgress}
+                          title="Request retranslation"
+                        >
+                          <RefreshCw
+                            className={`h-4 w-4 ${
+                              isInProgress ? 'animate-spin text-blue-600' : ''
+                            }`}
+                          />
+                        </Button>
                       </div>
                     </div>
 
-                    <Button
-                      variant={isSelected ? 'default' : 'ghost'}
-                      size="sm"
-                      onClick={() => onTranslationSelect?.(translation)}
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleCopyHtml(translation)}
-                      disabled={!translation.translatedHtml}
-                      title="Copy translated HTML"
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
+                    {translation.retranslateReason && (
+                      <div className="rounded-md border border-dashed border-primary/30 bg-primary/5 p-2 text-xs text-muted-foreground">
+                        Last feedback: {translation.retranslateReason}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -378,6 +489,11 @@ export function TranslationPanel({
                             {translation.errorMessage}
                           </div>
                         )}
+                        {translation.retranslateReason && (
+                          <div className="text-xs text-muted-foreground">
+                            Feedback: {translation.retranslateReason}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -391,7 +507,7 @@ export function TranslationPanel({
         {!isLoadingTranslations &&
           !isTranslationsError &&
           activeTasks.length === 0 &&
-          completedTranslations.length === 0 &&
+          availableTranslations.length === 0 &&
           failedTranslations.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
               <Languages className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -399,6 +515,85 @@ export function TranslationPanel({
               <p className="text-xs">Select languages above to get started</p>
             </div>
           )}
+
+        <Dialog
+          open={Boolean(retranslateTarget)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setRetranslateTarget(null);
+              setRetranslateReason('');
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Request Retranslation</DialogTitle>
+              <DialogDescription>
+                Provide guidance for the new translation so we can refine the
+                copy.
+              </DialogDescription>
+            </DialogHeader>
+
+            {retranslateTarget && (
+              <div className="space-y-4">
+                <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-sm">
+                  <div className="font-medium">
+                    {getLanguageByCode(retranslateTarget.languageCode)?.name ||
+                      retranslateTarget.languageCode}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {getLanguageByCode(retranslateTarget.languageCode)?.nativeName}
+                  </div>
+                  {retranslateTarget.retranslateAttempts > 0 && (
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      Previous retranslate attempts:{' '}
+                      {retranslateTarget.retranslateAttempts}
+                    </div>
+                  )}
+                  {retranslateTarget.retranslateReason && (
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      Last feedback: {retranslateTarget.retranslateReason}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    What should change?
+                  </label>
+                  <Textarea
+                    value={retranslateReason}
+                    onChange={(event) => setRetranslateReason(event.target.value)}
+                    placeholder="Explain what needs to be different in the next translation..."
+                    rows={4}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Minimum 5 characters. Be specific about tone, wording, or
+                    context.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <DialogFooter className="flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setRetranslateTarget(null);
+                  setRetranslateReason('');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleRetranslateSubmit}
+                disabled={!canSubmitRetranslate || retranslateMutation.isPending}
+              >
+                {retranslateMutation.isPending ? 'Requesting…' : 'Retranslate'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );

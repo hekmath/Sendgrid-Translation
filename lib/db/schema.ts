@@ -56,6 +56,8 @@ export const templateTranslations = pgTable('template_translations', {
   translatedSubject: text('translated_subject'),
   status: translationStatusEnum('status').notNull().default('pending'),
   errorMessage: text('error_message'),
+  retranslateReason: text('retranslate_reason'),
+  retranslateAttempts: integer('retranslate_attempts').notNull().default(0),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
