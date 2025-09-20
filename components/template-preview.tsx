@@ -14,8 +14,12 @@ import {
   ExternalLink,
   AlertCircle,
   CheckCircle,
+  Languages,
+  X,
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import type { TemplateTranslation } from '@/lib/db/schema';
+import { getLanguageByCode } from '@/lib/constants/languages';
 
 interface ParsedTestData {
   [key: string]: string | number | boolean | ParsedTestData;
@@ -25,6 +29,8 @@ interface TemplatePreviewProps {
   htmlContent: string;
   subject: string;
   testData: ParsedTestData;
+  translation?: TemplateTranslation | null;
+  onClearTranslation?: () => void;
 }
 
 interface EnvState {
@@ -149,10 +155,15 @@ export function TemplatePreview({
   htmlContent,
   subject,
   testData,
+  translation,
+  onClearTranslation,
 }: TemplatePreviewProps) {
   const [renderedHTML, setRenderedHTML] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('desktop');
   const [compilationError, setCompilationError] = useState('');
+  const [contentMode, setContentMode] = useState<'original' | 'translation'>(
+    'original'
+  );
 
   const [envState, setEnvState] = useState<EnvState>({
     values: {},
@@ -164,12 +175,56 @@ export function TemplatePreview({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const fetchedEnvKeysRef = useRef<Set<string>>(new Set());
 
-  const envKeys = useMemo(() => extractEnvKeys(htmlContent), [htmlContent]);
+  const translationLanguage = translation
+    ? getLanguageByCode(translation.languageCode)
+    : undefined;
+
+  const translationLanguageName = translation
+    ? translationLanguage?.name ?? translation.languageCode.toUpperCase()
+    : undefined;
+
+  const translationLanguageNativeName = translation
+    ? translationLanguage?.nativeName ?? translationLanguageName
+    : undefined;
+
+  useEffect(() => {
+    if (translation?.id) {
+      setContentMode(translation.translatedHtml ? 'translation' : 'original');
+    } else {
+      setContentMode('original');
+    }
+  }, [translation?.id, translation?.translatedHtml]);
+
+  const isTranslationAvailable = Boolean(
+    translation?.translatedHtml && translation.translatedHtml.trim().length > 0
+  );
+
+  const showTranslation = contentMode === 'translation' && isTranslationAvailable;
+
+  const activeHtml = useMemo(() => {
+    if (showTranslation && translation?.translatedHtml) {
+      return translation.translatedHtml;
+    }
+    return htmlContent;
+  }, [showTranslation, translation?.translatedHtml, htmlContent]);
+
+  const activeSubject = useMemo(() => {
+    if (showTranslation && translation) {
+      return translation.translatedSubject || subject;
+    }
+    return subject;
+  }, [showTranslation, translation?.translatedSubject, translation, subject]);
+
+  const translationLabel = translation
+    ? translationLanguageName || 'Translation'
+    : 'Translation';
+
+  const envKeys = useMemo(() => extractEnvKeys(activeHtml), [activeHtml]);
 
   const compiledTemplate = useMemo(() => {
     try {
       setCompilationError('');
-      return Handlebars.compile(htmlContent);
+      return Handlebars.compile(activeHtml);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Template compilation failed';
@@ -177,7 +232,7 @@ export function TemplatePreview({
       console.error('Failed to compile template:', error);
       return null;
     }
-  }, [htmlContent]);
+  }, [activeHtml]);
 
   // Reset env state when keys change
   useEffect(() => {
@@ -286,7 +341,7 @@ export function TemplatePreview({
       }
 
       if (!compiledTemplate) {
-        setRenderedHTML(htmlContent);
+        setRenderedHTML(activeHtml);
         return;
       }
 
@@ -301,7 +356,7 @@ export function TemplatePreview({
         setRenderedHTML(html);
       } catch (error) {
         console.error('Failed to render template:', error);
-        setRenderedHTML(htmlContent);
+        setRenderedHTML(activeHtml);
       }
     },
     [
@@ -309,7 +364,7 @@ export function TemplatePreview({
       context,
       envKeys,
       fetchEnvValues,
-      htmlContent,
+      activeHtml,
       resolveEnvValue,
     ]
   );
@@ -319,8 +374,8 @@ export function TemplatePreview({
   }, [refreshPreview]);
 
   const finalMarkup = useMemo(
-    () => buildDocumentMarkup(renderedHTML || htmlContent),
-    [renderedHTML, htmlContent]
+    () => buildDocumentMarkup(renderedHTML || activeHtml),
+    [renderedHTML, activeHtml]
   );
 
   useEffect(() => {
@@ -346,6 +401,16 @@ export function TemplatePreview({
           <div className="flex items-center gap-2 mb-1">
             <Eye className="h-4 w-4 text-primary" />
             <span className="font-medium text-sm">Live Preview</span>
+            {translation && (
+              <Badge
+                variant={showTranslation ? 'default' : 'secondary'}
+                className="text-xs"
+              >
+                {showTranslation
+                  ? `Translation · ${translationLabel}`
+                  : 'Original content'}
+              </Badge>
+            )}
             {compilationError && (
               <Badge variant="destructive" className="text-xs">
                 <AlertCircle className="h-3 w-3 mr-1" />
@@ -354,7 +419,15 @@ export function TemplatePreview({
             )}
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            {subject && <span className="truncate">Subject: {subject}</span>}
+            {activeSubject && (
+              <span className="truncate">Subject: {activeSubject}</span>
+            )}
+            {translation && (
+              <span className="flex items-center gap-1">
+                <Languages className="h-3 w-3" />
+                {translationLanguageNativeName || translationLabel}
+              </span>
+            )}
             {envKeys.length > 0 && (
               <div className="flex items-center gap-1">
                 {envState.loading ? (
@@ -371,6 +444,46 @@ export function TemplatePreview({
         </div>
 
         <div className="flex items-center gap-2">
+          {translation && (
+            <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-background p-1">
+              <Button
+                variant={contentMode === 'original' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setContentMode('original')}
+                className="h-8 px-2"
+              >
+                Original
+              </Button>
+              <Button
+                variant={contentMode === 'translation' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setContentMode('translation')}
+                disabled={!isTranslationAvailable}
+                className="h-8 px-2"
+                title={
+                  isTranslationAvailable
+                    ? `View ${translationLabel} translation`
+                    : 'Translation is still processing'
+                }
+              >
+                <Languages className="h-4 w-4" />
+                <span className="ml-1 hidden sm:inline text-xs">
+                  {translationLabel}
+                </span>
+              </Button>
+            </div>
+          )}
+          {translation && onClearTranslation && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClearTranslation}
+              className="h-8 px-2"
+              title="Exit translation preview"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
           {/* Viewport Controls */}
           <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-background p-1">
             {Object.entries(VIEWPORT_CONFIG).map(([mode, config]) => {
@@ -428,6 +541,16 @@ export function TemplatePreview({
           <AlertCircle className="h-4 w-4" />
           <AlertDescription className="text-sm">
             {envState.error}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {translation && !isTranslationAvailable && (
+        <Alert variant="default" className="mx-4 mt-2">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="text-sm">
+            This translation is still processing. The original content is shown
+            until translated HTML is available.
           </AlertDescription>
         </Alert>
       )}

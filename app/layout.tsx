@@ -1,26 +1,32 @@
-import type { Metadata } from 'next'
-import { GeistSans } from 'geist/font/sans'
-import { GeistMono } from 'geist/font/mono'
-import { Analytics } from '@vercel/analytics/next'
-import './globals.css'
+import type { Metadata } from 'next';
+import { GeistSans } from 'geist/font/sans';
+import { GeistMono } from 'geist/font/mono';
+import { Analytics } from '@vercel/analytics/next';
+import { QueryProvider } from '@/providers/query-provider';
+import { TranslationActivityDrawer } from '@/components/translation-activity-drawer';
+import { Toaster } from '@/components/ui/sonner';
+import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
-  generator: 'v0.app',
-}
+  title: 'SendGrid Template Manager',
+  description: 'Manage and translate SendGrid templates',
+};
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode
+  children: React.ReactNode;
 }>) {
   return (
     <html lang="en">
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
-        {children}
+        <QueryProvider>
+          {children}
+          <TranslationActivityDrawer />
+          <Toaster />
+        </QueryProvider>
         <Analytics />
       </body>
     </html>
-  )
+  );
 }

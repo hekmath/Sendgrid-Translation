@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-
 import {
   Select,
   SelectContent,
@@ -12,9 +11,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Code, Eye, Settings, FileText, Calendar, User } from 'lucide-react';
+import {
+  Code,
+  Eye,
+  Settings,
+  FileText,
+  Calendar,
+  User,
+  Languages,
+} from 'lucide-react';
 import { CodeEditor } from '@/components/code-editor';
 import { TemplatePreview } from '@/components/template-preview';
+import { TranslationPanel } from '@/components/translation-panel';
+import type { TemplateTranslation } from '@/lib/db/schema';
 
 interface SendGridTemplateVersion {
   id: string;
@@ -52,6 +61,8 @@ export function TemplateEditor({ template, apiKey }: TemplateEditorProps) {
     useState<SendGridTemplateVersion | null>(null);
   const [testData, setTestData] = useState<ParsedTestData>({});
   const [activeTab, setActiveTab] = useState('preview');
+  const [selectedTranslation, setSelectedTranslation] =
+    useState<TemplateTranslation | null>(null);
 
   // Initialize active version
   useEffect(() => {
@@ -91,6 +102,10 @@ export function TemplateEditor({ template, apiKey }: TemplateEditorProps) {
 
     setTestData(parsedData);
   }, [activeVersion]);
+
+  useEffect(() => {
+    setSelectedTranslation(null);
+  }, [activeVersion?.id]);
 
   const extractVariablesFromHTML = useCallback((html: string): string[] => {
     const regex = /\{\{\s*([^}]+)\s*\}\}/g;
@@ -144,6 +159,16 @@ export function TemplateEditor({ template, apiKey }: TemplateEditorProps) {
     [template.versions]
   );
 
+  const handleTranslationSelect = useCallback(
+    (translation: TemplateTranslation) => {
+      setSelectedTranslation((current) =>
+        current?.id === translation.id ? null : translation
+      );
+      setActiveTab('preview');
+    },
+    []
+  );
+
   const formatDate = useCallback((dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
@@ -158,6 +183,7 @@ export function TemplateEditor({ template, apiKey }: TemplateEditorProps) {
     () => [
       { value: 'preview', label: 'Preview', icon: Eye },
       { value: 'code', label: 'Code', icon: Code },
+      { value: 'translations', label: 'Translations', icon: Languages },
     ],
     []
   );
@@ -246,7 +272,7 @@ export function TemplateEditor({ template, apiKey }: TemplateEditorProps) {
           className="h-full flex flex-col"
         >
           <CardHeader className="pb-2">
-            <TabsList className="grid w-full grid-cols-2 h-10">
+            <TabsList className="grid w-full grid-cols-3 h-10">
               {tabConfig.map(({ value, label, icon: Icon }) => (
                 <TabsTrigger
                   key={value}
@@ -266,6 +292,8 @@ export function TemplateEditor({ template, apiKey }: TemplateEditorProps) {
                 htmlContent={activeVersion.html_content}
                 subject={activeVersion.subject}
                 testData={testData}
+                translation={selectedTranslation}
+                onClearTranslation={() => setSelectedTranslation(null)}
               />
             </TabsContent>
 
@@ -273,6 +301,17 @@ export function TemplateEditor({ template, apiKey }: TemplateEditorProps) {
               <CodeEditor
                 htmlContent={activeVersion.html_content}
                 subject={activeVersion.subject}
+                translation={selectedTranslation}
+                onClearTranslation={() => setSelectedTranslation(null)}
+              />
+            </TabsContent>
+
+            <TabsContent value="translations" className="h-full m-0">
+              <TranslationPanel
+                template={template}
+                activeVersion={activeVersion}
+                onTranslationSelect={handleTranslationSelect}
+                selectedTranslationId={selectedTranslation?.id}
               />
             </TabsContent>
           </CardContent>

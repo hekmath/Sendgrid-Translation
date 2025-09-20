@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -16,11 +16,17 @@ import {
   Hash,
   Eye,
   EyeOff,
+  Languages,
+  X,
 } from 'lucide-react';
+import type { TemplateTranslation } from '@/lib/db/schema';
+import { getLanguageByCode } from '@/lib/constants/languages';
 
 interface CodeEditorProps {
   htmlContent: string;
   subject: string;
+  translation?: TemplateTranslation | null;
+  onClearTranslation?: () => void;
 }
 
 interface CodeStats {
@@ -30,16 +36,63 @@ interface CodeStats {
   elements: number;
 }
 
-export function CodeEditor({ htmlContent, subject }: CodeEditorProps) {
+export function CodeEditor({
+  htmlContent,
+  subject,
+  translation,
+  onClearTranslation,
+}: CodeEditorProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showLineNumbers, setShowLineNumbers] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [contentMode, setContentMode] =
+    useState<'original' | 'translation'>('original');
+
+  const translationLanguage = translation
+    ? getLanguageByCode(translation.languageCode)
+    : undefined;
+
+  const translationLanguageName = translation
+    ? translationLanguage?.name ?? translation.languageCode.toUpperCase()
+    : undefined;
+
+  const translationLanguageNativeName = translation
+    ? translationLanguage?.nativeName ?? translationLanguageName
+    : undefined;
+
+  useEffect(() => {
+    if (translation?.id) {
+      setContentMode(translation.translatedHtml ? 'translation' : 'original');
+    } else {
+      setContentMode('original');
+    }
+  }, [translation?.id, translation?.translatedHtml]);
+
+  const isTranslationAvailable = Boolean(
+    translation?.translatedHtml && translation.translatedHtml.trim().length > 0
+  );
+
+  const showTranslation = contentMode === 'translation' && isTranslationAvailable;
+
+  const activeHtml = useMemo(() => {
+    if (showTranslation && translation?.translatedHtml) {
+      return translation.translatedHtml;
+    }
+    return htmlContent;
+  }, [showTranslation, translation?.translatedHtml, htmlContent]);
+
+  const activeSubject = useMemo(() => {
+    if (showTranslation && translation) {
+      return translation.translatedSubject || subject;
+    }
+    return subject;
+  }, [showTranslation, translation?.translatedSubject, translation, subject]);
 
   const formattedHTML = useMemo(() => {
-    if (!htmlContent.trim()) return '';
+    if (!activeHtml.trim()) return '';
 
     // Basic HTML formatting for better readability
-    let formatted = htmlContent
+    let formatted = activeHtml
       .replace(/></g, '>\n<')
       .replace(/\{\{/g, '\n{{')
       .replace(/\}\}/g, '}}\n')
@@ -77,7 +130,7 @@ export function CodeEditor({ htmlContent, subject }: CodeEditorProps) {
     });
 
     return indentedLines.join('\n');
-  }, [htmlContent]);
+  }, [activeHtml]);
 
   const highlightedHTML = useMemo(() => {
     if (!formattedHTML) return '';
@@ -127,13 +180,13 @@ export function CodeEditor({ htmlContent, subject }: CodeEditorProps) {
   }, [formattedHTML, searchTerm]);
 
   const codeStats = useMemo((): CodeStats => {
-    const characters = htmlContent.length;
+    const characters = activeHtml.length;
     const lines = formattedHTML.split('\n').length;
-    const variables = (htmlContent.match(/\{\{[^}]+\}\}/g) || []).length;
-    const elements = (htmlContent.match(/<[^/!][^>]*>/g) || []).length;
+    const variables = (activeHtml.match(/\{\{[^}]+\}\}/g) || []).length;
+    const elements = (activeHtml.match(/<[^/!][^>]*>/g) || []).length;
 
     return { characters, lines, variables, elements };
-  }, [htmlContent, formattedHTML]);
+  }, [activeHtml, formattedHTML]);
 
   const copyToClipboard = useCallback(async () => {
     try {
@@ -149,7 +202,7 @@ export function CodeEditor({ htmlContent, subject }: CodeEditorProps) {
     return highlightedHTML.split('\n');
   }, [highlightedHTML]);
 
-  if (!htmlContent.trim()) {
+  if (!activeHtml.trim()) {
     return (
       <div className="h-full flex items-center justify-center p-8">
         <div className="text-center">
@@ -176,9 +229,59 @@ export function CodeEditor({ htmlContent, subject }: CodeEditorProps) {
             <Badge variant="secondary" className="text-xs">
               HTML
             </Badge>
+            {translation && (
+              <Badge
+                variant={showTranslation ? 'default' : 'secondary'}
+                className="text-xs"
+              >
+                {showTranslation
+                  ? `Translation · ${translationLanguageName}`
+                  : 'Original content'}
+              </Badge>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
+            {translation && (
+              <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-background p-1">
+                <Button
+                  variant={contentMode === 'original' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setContentMode('original')}
+                  className="h-8 px-2"
+                >
+                  Original
+                </Button>
+                <Button
+                  variant={contentMode === 'translation' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setContentMode('translation')}
+                  disabled={!isTranslationAvailable}
+                  className="h-8 px-2"
+                  title={
+                    isTranslationAvailable
+                      ? `View ${translationLanguageName} translation`
+                      : 'Translation is still processing'
+                  }
+                >
+                  <Languages className="h-4 w-4" />
+                  <span className="ml-1 hidden sm:inline">
+                    {translationLanguageName || 'Translation'}
+                  </span>
+                </Button>
+              </div>
+            )}
+            {translation && onClearTranslation && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClearTranslation}
+                className="h-8 px-2"
+                title="Exit translation code preview"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -208,12 +311,28 @@ export function CodeEditor({ htmlContent, subject }: CodeEditorProps) {
         </div>
 
         {/* Subject Display */}
-        {subject && (
-          <div className="mb-3 p-2 bg-muted/50 rounded-lg">
-            <div className="text-xs text-muted-foreground mb-1">
-              Email Subject:
+        {(activeSubject || translation) && (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/50 p-2">
+            <div>
+              <div className="text-xs text-muted-foreground mb-1">
+                Email Subject
+              </div>
+              <div className="text-sm font-medium">
+                {activeSubject || 'No subject'}
+              </div>
             </div>
-            <div className="text-sm font-medium">{subject}</div>
+            {translation && (
+              <div className="text-xs text-muted-foreground flex items-center gap-1">
+                <Languages className="h-3 w-3" />
+                {translationLanguageNativeName || translationLanguageName}
+              </div>
+            )}
+          </div>
+        )}
+
+        {translation && !isTranslationAvailable && (
+          <div className="mb-3 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            Translation HTML is still processing. Showing original code for now.
           </div>
         )}
 
