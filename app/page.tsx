@@ -114,7 +114,7 @@ export default function SendGridTemplateManager() {
           <div className="text-center mb-8">
             <Mail className="h-12 w-12 text-primary mx-auto mb-4" />
             <h1 className="text-3xl font-bold text-foreground mb-2">
-              SendGrid Template Manager
+              Keeper Fluent Templates
             </h1>
             <p className="text-muted-foreground">
               Connect to your SendGrid account to manage and preview your email
@@ -191,7 +191,7 @@ export default function SendGridTemplateManager() {
               <Mail className="h-8 w-8 text-primary" />
               <div>
                 <h1 className="text-2xl font-bold text-foreground">
-                  SendGrid Templates
+                  Keeper Fluent Templates
                 </h1>
                 <p className="text-sm text-muted-foreground">
                   {templates.length} templates loaded

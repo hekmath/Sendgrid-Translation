@@ -278,12 +278,16 @@ function TaskCard({ task, translations }: TaskCardProps) {
               className="flex items-center gap-1"
             >
               {language?.name ?? translation.languageCode}
+              <span className="text-[10px] uppercase">v{translation.version}</span>
               {translation.status === 'completed' ? (
                 <CheckCircle className="h-3 w-3" />
               ) : translation.status === 'failed' ? (
                 <XCircle className="h-3 w-3" />
               ) : (
                 <Loader2 className="h-3 w-3 animate-spin" />
+              )}
+              {translation.verifiedAt && (
+                <CheckCircle className="h-3 w-3 text-green-600" />
               )}
             </Badge>
           );

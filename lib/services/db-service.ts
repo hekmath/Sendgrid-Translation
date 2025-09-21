@@ -7,7 +7,7 @@ import {
   type TranslationTask,
   type TemplateTranslation,
 } from '@/lib/db/schema';
-import { eq, and, desc, sql, inArray } from 'drizzle-orm';
+import { eq, and, desc, sql, inArray, isNull } from 'drizzle-orm';
 
 export const dbService = {
   translationTasks: {
@@ -109,7 +109,12 @@ export const dbService = {
       return await db
         .select()
         .from(templateTranslations)
-        .where(eq(templateTranslations.templateId, templateId))
+        .where(
+          and(
+            eq(templateTranslations.templateId, templateId),
+            isNull(templateTranslations.deletedAt)
+          )
+        )
         .orderBy(desc(templateTranslations.createdAt));
     },
 
@@ -123,15 +128,36 @@ export const dbService = {
       const rows = await db
         .select()
         .from(templateTranslations)
-        .where(inArray(templateTranslations.taskId, taskIds))
+        .where(
+          and(
+            inArray(templateTranslations.taskId, taskIds),
+            isNull(templateTranslations.deletedAt)
+          )
+        )
         .orderBy(desc(templateTranslations.createdAt));
 
       return rows.reduce<Record<string, TemplateTranslation[]>>(
         (acc, translation) => {
-          if (!acc[translation.taskId]) {
-            acc[translation.taskId] = [];
+          const bucket = acc[translation.taskId] || [];
+          const existingIndex = bucket.findIndex(
+            (entry) => entry.languageCode === translation.languageCode
+          );
+
+          if (existingIndex === -1) {
+            bucket.push(translation);
+          } else {
+            const existing = bucket[existingIndex];
+            const isNewerVersion = translation.version > existing.version;
+            const isSameVersionNewerTimestamp =
+              translation.version === existing.version &&
+              translation.updatedAt > existing.updatedAt;
+
+            if (isNewerVersion || isSameVersionNewerTimestamp) {
+              bucket[existingIndex] = translation;
+            }
           }
-          acc[translation.taskId].push(translation);
+
+          acc[translation.taskId] = bucket;
           return acc;
         },
         {}
@@ -142,7 +168,13 @@ export const dbService = {
       return await db
         .select()
         .from(templateTranslations)
-        .where(eq(templateTranslations.taskId, taskId));
+        .where(
+          and(
+            eq(templateTranslations.taskId, taskId),
+            isNull(templateTranslations.deletedAt)
+          )
+        )
+        .orderBy(desc(templateTranslations.createdAt));
     },
 
     async findById(id: string): Promise<TemplateTranslation | undefined> {
@@ -163,10 +195,11 @@ export const dbService = {
         .where(
           and(
             eq(templateTranslations.templateId, templateId),
-            eq(templateTranslations.languageCode, languageCode)
+            eq(templateTranslations.languageCode, languageCode),
+            isNull(templateTranslations.deletedAt)
           )
         )
-        .orderBy(desc(templateTranslations.createdAt))
+        .orderBy(desc(templateTranslations.version), desc(templateTranslations.createdAt))
         .limit(1);
       return translation;
     },
@@ -199,32 +232,58 @@ export const dbService = {
     async requestRetranslate(
       id: string,
       reason: string
-    ): Promise<{ translation: TemplateTranslation; previousStatus: TemplateTranslation['status'] } | undefined> {
+    ): Promise<{
+      newTranslation: TemplateTranslation;
+      previousTranslation: TemplateTranslation;
+      previousStatus: TemplateTranslation['status'];
+    } | undefined> {
       const existing = await this.findById(id);
       if (!existing) {
+        return undefined;
+      }
+
+      if (existing.deletedAt) {
         return undefined;
       }
 
       const previousStatus = existing.status;
       const now = new Date();
 
-      const updateResult = await db
-        .update(templateTranslations)
-        .set({
+      const nextVersion = await this.getNextVersion(
+        existing.templateId,
+        existing.templateVersionId,
+        existing.languageCode
+      );
+
+      const [newTranslation] = await db
+        .insert(templateTranslations)
+        .values({
+          taskId: existing.taskId,
+          templateId: existing.templateId,
+          templateVersionId: existing.templateVersionId,
+          languageCode: existing.languageCode,
+          originalHtml: existing.originalHtml,
+          originalSubject: existing.originalSubject,
           status: 'processing',
-          errorMessage: null,
           retranslateReason: reason,
-          retranslateAttempts:
-            sql`${templateTranslations.retranslateAttempts} + 1`,
+          retranslateAttempts: 0,
+          version: nextVersion,
+          createdAt: now,
           updatedAt: now,
         })
-        .where(eq(templateTranslations.id, id))
         .returning();
 
-      const updated = updateResult[0];
-      if (!updated) {
+      if (!newTranslation) {
         return undefined;
       }
+
+      await db
+        .update(templateTranslations)
+        .set({
+          retranslateAttempts: existing.retranslateAttempts + 1,
+          updatedAt: now,
+        })
+        .where(eq(templateTranslations.id, existing.id));
 
       if (previousStatus === 'completed') {
         await db
@@ -234,7 +293,7 @@ export const dbService = {
               sql`GREATEST(${translationTasks.completedLanguages} - 1, 0)`,
             updatedAt: now,
           })
-          .where(eq(translationTasks.id, updated.taskId));
+          .where(eq(translationTasks.id, newTranslation.taskId));
       } else if (previousStatus === 'failed') {
         await db
           .update(translationTasks)
@@ -243,10 +302,61 @@ export const dbService = {
               sql`GREATEST(${translationTasks.failedLanguages} - 1, 0)`,
             updatedAt: now,
           })
-          .where(eq(translationTasks.id, updated.taskId));
+          .where(eq(translationTasks.id, newTranslation.taskId));
       }
 
-      return { translation: updated, previousStatus };
+      return {
+        newTranslation,
+        previousTranslation: existing,
+        previousStatus,
+      };
+    },
+
+    async getNextVersion(
+      templateId: string,
+      templateVersionId: string,
+      languageCode: string
+    ): Promise<number> {
+      const [result] = await db
+        .select({
+          maxVersion: sql<number>`COALESCE(MAX(${templateTranslations.version}), 0)`,
+        })
+        .from(templateTranslations)
+        .where(
+          and(
+            eq(templateTranslations.templateId, templateId),
+            eq(templateTranslations.templateVersionId, templateVersionId),
+            eq(templateTranslations.languageCode, languageCode)
+          )
+        );
+
+      const maxVersion = result?.maxVersion ?? 0;
+      return maxVersion + 1;
+    },
+
+    async markVerified(id: string): Promise<void> {
+      await db
+        .update(templateTranslations)
+        .set({
+          verifiedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(templateTranslations.id, id),
+            isNull(templateTranslations.deletedAt)
+          )
+        );
+    },
+
+    async softDelete(id: string): Promise<void> {
+      await db
+        .update(templateTranslations)
+        .set({
+          deletedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(templateTranslations.id, id));
     },
   },
 };

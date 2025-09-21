@@ -40,9 +40,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { translation, previousStatus } = result;
+    const { newTranslation } = result;
 
-    const task = await dbService.translationTasks.findById(translation.taskId);
+    const task = await dbService.translationTasks.findById(newTranslation.taskId);
 
     if (!task) {
       return NextResponse.json(
@@ -51,24 +51,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await dbService.translationTasks.updateStatus(translation.taskId, 'processing');
+    await dbService.translationTasks.updateStatus(newTranslation.taskId, 'processing');
 
     await inngest.send({
       name: 'translation/retranslate-language',
       data: {
-        translationId: translation.id,
-        taskId: translation.taskId,
-        templateId: translation.templateId,
-        templateVersionId: translation.templateVersionId,
-        languageCode: translation.languageCode,
+        translationId: newTranslation.id,
+        taskId: newTranslation.taskId,
+        templateId: newTranslation.templateId,
+        templateVersionId: newTranslation.templateVersionId,
+        languageCode: newTranslation.languageCode,
         reason,
-        htmlContent: translation.originalHtml,
-        subject: translation.originalSubject ?? '',
+        htmlContent: newTranslation.originalHtml,
+        subject: newTranslation.originalSubject ?? '',
         totalLanguages: task.totalLanguages,
       },
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, translationId: newTranslation.id });
   } catch (error) {
     console.error('Failed to request retranslation:', error);
 

@@ -1,6 +1,6 @@
 import { Inngest } from 'inngest';
 
 export const inngest = new Inngest({
-  id: 'sendgrid-template-manager',
-  name: 'SendGrid Template Manager',
+  id: 'keeper-fluent-templates',
+  name: 'Keeper Fluent Templates',
 });

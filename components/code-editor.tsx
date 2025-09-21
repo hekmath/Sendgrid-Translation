@@ -18,6 +18,7 @@ import {
   EyeOff,
   Languages,
   X,
+  CheckCircle,
 } from 'lucide-react';
 import type { TemplateTranslation } from '@/lib/db/schema';
 import { getLanguageByCode } from '@/lib/constants/languages';
@@ -228,8 +229,8 @@ export function CodeEditor({
     <div className="h-full flex flex-col">
       {/* Header */}
       <div className="px-6 py-4 border-b border-border/60 bg-card/50">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
             <Code className="h-5 w-5 text-primary" />
             <h3 className="font-semibold">Template Code</h3>
             <Badge variant="secondary" className="text-xs">
@@ -243,6 +244,16 @@ export function CodeEditor({
                 {showTranslation
                   ? `Translation · ${translationLanguageName}`
                   : 'Original content'}
+              </Badge>
+            )}
+            {translation?.version && (
+              <Badge variant="outline" className="text-xs uppercase">
+                v{translation.version}
+              </Badge>
+            )}
+            {translation?.verifiedAt && (
+              <Badge variant="secondary" className="flex items-center gap-1 text-xs">
+                <CheckCircle className="h-3 w-3" /> Verified
               </Badge>
             )}
           </div>

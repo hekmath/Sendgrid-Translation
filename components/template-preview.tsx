@@ -402,9 +402,9 @@ export function TemplatePreview({
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Header Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-card/50 px-4 py-3">
+      <div className="flex flex-col gap-3 border-b border-border/60 bg-card/50 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex flex-wrap items-center gap-2">
             <Eye className="h-4 w-4 text-primary" />
             <span className="font-medium text-sm">Live Preview</span>
             {translation && (
@@ -417,6 +417,17 @@ export function TemplatePreview({
                   : 'Original content'}
               </Badge>
             )}
+            {translation?.version && (
+              <Badge variant="outline" className="text-xs uppercase">
+                v{translation.version}
+              </Badge>
+            )}
+            {translation?.verifiedAt && (
+              <Badge variant="secondary" className="flex items-center gap-1 text-xs">
+                <CheckCircle className="h-3 w-3" />
+                Verified
+              </Badge>
+            )}
             {compilationError && (
               <Badge variant="destructive" className="text-xs">
                 <AlertCircle className="h-3 w-3 mr-1" />
@@ -424,7 +435,7 @@ export function TemplatePreview({
               </Badge>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
             {activeSubject && (
               <span className="truncate">Subject: {activeSubject}</span>
             )}

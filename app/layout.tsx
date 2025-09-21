@@ -8,7 +8,7 @@ import { Toaster } from '@/components/ui/sonner';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'SendGrid Template Manager',
+  title: 'Keeper Fluent Templates',
   description: 'Manage and translate SendGrid templates',
 };
 

@@ -50,6 +50,7 @@ export const templateTranslations = pgTable('template_translations', {
   templateId: text('template_id').notNull(),
   templateVersionId: text('template_version_id').notNull(),
   languageCode: text('language_code').notNull(),
+  version: integer('version').notNull().default(1),
   originalHtml: text('original_html').notNull(),
   translatedHtml: text('translated_html'),
   originalSubject: text('original_subject'),
@@ -58,6 +59,8 @@ export const templateTranslations = pgTable('template_translations', {
   errorMessage: text('error_message'),
   retranslateReason: text('retranslate_reason'),
   retranslateAttempts: integer('retranslate_attempts').notNull().default(0),
+  verifiedAt: timestamp('verified_at'),
+  deletedAt: timestamp('deleted_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

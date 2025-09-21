@@ -15,6 +15,13 @@
       "when": 1758335487816,
       "tag": "0001_cultured_betty_brant",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1758440000000,
+      "tag": "0002_add_translation_versioning",
+      "breakpoints": true
     }
   ]
 }

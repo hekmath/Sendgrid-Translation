@@ -71,6 +71,11 @@ async function runTranslation({
       updatedAt: new Date(),
     });
   } else {
+    const nextVersion = await dbService.templateTranslations.getNextVersion(
+      templateId,
+      templateVersionId,
+      languageCode
+    );
     translationRecord = await dbService.templateTranslations.create({
       taskId,
       templateId,
@@ -79,6 +84,7 @@ async function runTranslation({
       originalHtml: htmlContent,
       originalSubject: subject,
       status: 'processing',
+      version: nextVersion,
     });
   }
 
