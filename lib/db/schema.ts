@@ -12,6 +12,7 @@ import { relations } from 'drizzle-orm';
 // Enums
 export const taskStatusEnum = pgEnum('task_status', [
   'pending',
+  'queued',
   'processing',
   'completed',
   'failed',

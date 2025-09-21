@@ -4,6 +4,7 @@ import type { LanguageCode } from '@/lib/constants/languages';
 
 interface TranslationJobEvent {
   data: {
+    taskId?: string;
     templateId: string;
     templateName: string;
     templateVersionId: string;
@@ -18,7 +19,7 @@ export const coordinateTranslation = inngest.createFunction(
     id: 'coordinate-translation',
     name: 'Coordinate Translation Job',
     concurrency: {
-      limit: 3,
+      limit: 2,
     },
     retries: 2,
   },
@@ -31,12 +32,42 @@ export const coordinateTranslation = inngest.createFunction(
       htmlContent,
       subject,
       targetLanguages,
+      taskId: existingTaskId,
     } = event.data as TranslationJobEvent['data'];
 
     console.log(`Starting translation coordination for template ${templateId}`);
 
-    // Step 1: Create translation task
-    const task = await step.run('create-translation-task', async () => {
+    // Step 1: Create or hydrate translation task
+    const task = await step.run('prepare-translation-task', async () => {
+      if (existingTaskId) {
+        const existing = await dbService.translationTasks.findById(
+          existingTaskId
+        );
+
+        if (existing) {
+          await dbService.translationTasks.update(existingTaskId, {
+            templateId,
+            templateName,
+            templateVersionId,
+            targetLanguages,
+            sourceLanguage: 'en',
+            status: 'processing',
+            totalLanguages: targetLanguages.length,
+            completedLanguages: 0,
+            failedLanguages: 0,
+            errorMessage: null,
+          });
+
+          const refreshed = await dbService.translationTasks.findById(
+            existingTaskId
+          );
+
+          if (refreshed) {
+            return refreshed;
+          }
+        }
+      }
+
       return await dbService.translationTasks.create({
         templateId,
         templateName,

@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (['processing', 'pending'].includes(existing.status)) {
+    if (['queued', 'processing', 'pending'].includes(existing.status)) {
       return NextResponse.json(
         { error: 'Translation is still processing' },
         { status: 400 }
@@ -51,7 +51,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await dbService.translationTasks.updateStatus(newTranslation.taskId, 'processing');
+    await dbService.translationTasks.updateStatus(
+      newTranslation.taskId,
+      'queued'
+    );
 
     await inngest.send({
       name: 'translation/retranslate-language',

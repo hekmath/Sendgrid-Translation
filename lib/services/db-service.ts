@@ -44,7 +44,7 @@ export const dbService = {
 
     async updateStatus(
       id: string,
-      status: 'pending' | 'processing' | 'completed' | 'failed',
+      status: 'pending' | 'queued' | 'processing' | 'completed' | 'failed',
       errorMessage?: string
     ): Promise<void> {
       await db
@@ -88,7 +88,7 @@ export const dbService = {
       return await db
         .select()
         .from(translationTasks)
-        .where(eq(translationTasks.status, 'processing'))
+        .where(inArray(translationTasks.status, ['queued', 'processing']))
         .orderBy(desc(translationTasks.createdAt));
     },
 
@@ -226,7 +226,10 @@ export const dbService = {
             isNull(templateTranslations.deletedAt)
           )
         )
-        .orderBy(desc(templateTranslations.version), desc(templateTranslations.createdAt))
+        .orderBy(
+          desc(templateTranslations.version),
+          desc(templateTranslations.createdAt)
+        )
         .limit(1);
       return translation;
     },
@@ -259,11 +262,14 @@ export const dbService = {
     async requestRetranslate(
       id: string,
       reason: string
-    ): Promise<{
-      newTranslation: TemplateTranslation;
-      previousTranslation: TemplateTranslation;
-      previousStatus: TemplateTranslation['status'];
-    } | undefined> {
+    ): Promise<
+      | {
+          newTranslation: TemplateTranslation;
+          previousTranslation: TemplateTranslation;
+          previousStatus: TemplateTranslation['status'];
+        }
+      | undefined
+    > {
       const existing = await this.findById(id);
       if (!existing) {
         return undefined;
@@ -316,8 +322,7 @@ export const dbService = {
         await db
           .update(translationTasks)
           .set({
-            completedLanguages:
-              sql`GREATEST(${translationTasks.completedLanguages} - 1, 0)`,
+            completedLanguages: sql`GREATEST(${translationTasks.completedLanguages} - 1, 0)`,
             updatedAt: now,
           })
           .where(eq(translationTasks.id, newTranslation.taskId));
@@ -325,8 +330,7 @@ export const dbService = {
         await db
           .update(translationTasks)
           .set({
-            failedLanguages:
-              sql`GREATEST(${translationTasks.failedLanguages} - 1, 0)`,
+            failedLanguages: sql`GREATEST(${translationTasks.failedLanguages} - 1, 0)`,
             updatedAt: now,
           })
           .where(eq(translationTasks.id, newTranslation.taskId));

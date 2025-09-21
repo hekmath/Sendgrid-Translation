@@ -242,6 +242,8 @@ export function TranslationPanel({
         return <XCircle className="h-4 w-4 text-red-600" />;
       case 'processing':
         return <RefreshCw className="h-4 w-4 text-blue-600 animate-spin" />;
+      case 'queued':
+        return <Clock className="h-4 w-4 text-yellow-600" />;
       default:
         return <Clock className="h-4 w-4 text-yellow-600" />;
     }
@@ -255,10 +257,15 @@ export function TranslationPanel({
         return 'destructive';
       case 'processing':
         return 'secondary';
+      case 'queued':
+        return 'outline';
       default:
         return 'outline';
     }
   };
+
+  const formatTaskStatus = (status: string) =>
+    status.charAt(0).toUpperCase() + status.slice(1);
 
   const tasksForVersion = useMemo(
     () =>
@@ -271,7 +278,7 @@ export function TranslationPanel({
   const activeTasks = useMemo(
     () =>
       tasksForVersion.filter((task) =>
-        ['processing', 'pending'].includes(task.status)
+        ['queued', 'processing', 'pending'].includes(task.status)
       ),
     [tasksForVersion]
   );
@@ -431,7 +438,7 @@ export function TranslationPanel({
                     className="capitalize"
                   >
                     {getStatusIcon(task.status)}
-                    <span className="ml-1">{task.status}</span>
+                    <span className="ml-1">{formatTaskStatus(task.status)}</span>
                   </Badge>
                   <span className="text-xs text-muted-foreground">
                     {task.completedLanguages}/{task.totalLanguages} completed

@@ -28,6 +28,21 @@ const translationOutputSchema = z.object({
   notes: z.array(z.string()).optional().describe('Optional translation notes'),
 });
 
+type TranslationOutcome =
+  | {
+      success: true;
+      languageCode: LanguageCode;
+      translationId: string;
+      retranslated: boolean;
+    }
+  | {
+      success: false;
+      languageCode: LanguageCode;
+      translationId: string;
+      retranslated: boolean;
+      errorMessage: string;
+    };
+
 async function runTranslation({
   taskId,
   languageCode,
@@ -44,7 +59,7 @@ async function runTranslation({
   reason?: string;
   translationId?: string;
   isRetranslate: boolean;
-}) {
+}): Promise<TranslationOutcome> {
   if (!translationId) {
     const context = isRetranslate ? 'retranslation' : 'translation';
     throw new Error(`Missing translationId for ${context} request`);
@@ -128,7 +143,18 @@ Provide clean translations while preserving all technical elements.`,
     });
     await dbService.translationTasks.syncCounts(taskId);
 
-    throw error;
+    console.error(
+      `Translation failed for ${languageCode} in task ${taskId}:`,
+      errorMessage
+    );
+
+    return {
+      success: false,
+      languageCode,
+      translationId: translationRecord.id,
+      retranslated: isRetranslate,
+      errorMessage,
+    };
   }
 }
 
@@ -137,7 +163,7 @@ export const translateLanguage = inngest.createFunction(
     id: 'translate-language',
     name: 'Translate Single Language',
     concurrency: {
-      limit: 10,
+      limit: 2,
     },
     retries: 2,
   },
@@ -194,25 +220,15 @@ export const translateLanguage = inngest.createFunction(
     );
 
     const result = await step.run(`translate-${languageCode}`, async () => {
-      try {
-        return await runTranslation({
-          taskId,
-          languageCode,
-          htmlContent,
-          subject,
-          translationId,
-          reason: undefined,
-          isRetranslate: false,
-        });
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : 'Unknown error';
-        console.error(
-          `Translation failed for ${languageCode} in task ${taskId}:`,
-          errorMessage
-        );
-        throw error;
-      }
+      return await runTranslation({
+        taskId,
+        languageCode,
+        htmlContent,
+        subject,
+        translationId,
+        reason: undefined,
+        isRetranslate: false,
+      });
     });
 
     // Check if all translations are complete - WITH PROPER SYNCHRONIZATION
@@ -270,7 +286,7 @@ export const retranslateLanguage = inngest.createFunction(
     id: 'retranslate-language',
     name: 'Retranslate Single Language',
     concurrency: {
-      limit: 10,
+      limit: 2,
     },
     retries: 2,
   },
@@ -292,6 +308,10 @@ export const retranslateLanguage = inngest.createFunction(
       `Retranslating template ${templateId} to ${languageCode} for task ${taskId}`
     );
 
+    await step.run('mark-task-processing', async () => {
+      await dbService.translationTasks.updateStatus(taskId, 'processing');
+    });
+
     const { translationId: resolvedTranslationId } = await step.run(
       `prepare-retranslation-${languageCode}`,
       async () => {
@@ -312,25 +332,15 @@ export const retranslateLanguage = inngest.createFunction(
     );
 
     const result = await step.run(`retranslate-${languageCode}`, async () => {
-      try {
-        return await runTranslation({
-          taskId,
-          languageCode,
-          htmlContent,
-          subject,
-          translationId: resolvedTranslationId,
-          reason,
-          isRetranslate: true,
-        });
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : 'Unknown error';
-        console.error(
-          `Retranslation failed for ${languageCode} in task ${taskId}:`,
-          errorMessage
-        );
-        throw error;
-      }
+      return await runTranslation({
+        taskId,
+        languageCode,
+        htmlContent,
+        subject,
+        translationId: resolvedTranslationId,
+        reason,
+        isRetranslate: true,
+      });
     });
 
     await step.run('retranslate-check-completion', async () => {

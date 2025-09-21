@@ -44,6 +44,7 @@ const STATUS_VARIANT: Record<TranslationTask['status'], 'default' | 'secondary' 
   completed: 'default',
   failed: 'destructive',
   processing: 'secondary',
+  queued: 'outline',
   pending: 'outline',
 };
 
@@ -55,6 +56,8 @@ function getStatusIcon(status: TranslationTask['status']) {
       return <XCircle className="h-4 w-4" />;
     case 'processing':
       return <Loader2 className="h-4 w-4 animate-spin" />;
+    case 'queued':
+      return <Clock className="h-4 w-4" />;
     default:
       return <Clock className="h-4 w-4" />;
   }
@@ -99,7 +102,7 @@ export function TranslationActivityDrawer() {
   const activeSummaries = useMemo(
     () =>
       debouncedSummaries.filter(({ task }) =>
-        ['processing', 'pending'].includes(task.status)
+        ['queued', 'processing', 'pending'].includes(task.status)
       ),
     [debouncedSummaries]
   );
