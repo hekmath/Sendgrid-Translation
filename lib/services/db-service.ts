@@ -57,21 +57,28 @@ export const dbService = {
         .where(eq(translationTasks.id, id));
     },
 
-    async incrementCompleted(id: string): Promise<void> {
-      await db
-        .update(translationTasks)
-        .set({
-          completedLanguages: sql`${translationTasks.completedLanguages} + 1`,
-          updatedAt: new Date(),
+    async syncCounts(id: string): Promise<void> {
+      const [counts] = await db
+        .select({
+          completed: sql<number>`SUM(CASE WHEN ${templateTranslations.status} = 'completed' THEN 1 ELSE 0 END)`,
+          failed: sql<number>`SUM(CASE WHEN ${templateTranslations.status} = 'failed' THEN 1 ELSE 0 END)`,
         })
-        .where(eq(translationTasks.id, id));
-    },
+        .from(templateTranslations)
+        .where(
+          and(
+            eq(templateTranslations.taskId, id),
+            isNull(templateTranslations.deletedAt)
+          )
+        );
 
-    async incrementFailed(id: string): Promise<void> {
+      const completedCount = counts?.completed ?? 0;
+      const failedCount = counts?.failed ?? 0;
+
       await db
         .update(translationTasks)
         .set({
-          failedLanguages: sql`${translationTasks.failedLanguages} + 1`,
+          completedLanguages: completedCount,
+          failedLanguages: failedCount,
           updatedAt: new Date(),
         })
         .where(eq(translationTasks.id, id));
@@ -175,6 +182,26 @@ export const dbService = {
           )
         )
         .orderBy(desc(templateTranslations.createdAt));
+    },
+
+    async findLatestByTaskAndLanguage(
+      taskId: string,
+      languageCode: string
+    ): Promise<TemplateTranslation | undefined> {
+      const [translation] = await db
+        .select()
+        .from(templateTranslations)
+        .where(
+          and(
+            eq(templateTranslations.taskId, taskId),
+            eq(templateTranslations.languageCode, languageCode),
+            isNull(templateTranslations.deletedAt)
+          )
+        )
+        .orderBy(desc(templateTranslations.createdAt))
+        .limit(1);
+
+      return translation;
     },
 
     async findById(id: string): Promise<TemplateTranslation | undefined> {

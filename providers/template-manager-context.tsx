@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import type { SendGridTemplate } from '@/lib/types/sendgrid';
 
 export interface TemplateManagerContextValue {
@@ -8,15 +8,16 @@ export interface TemplateManagerContextValue {
   setSelectedTemplate: (template: SendGridTemplate | null) => void;
 }
 
-const TemplateManagerContext =
-  createContext<TemplateManagerContextValue | undefined>(undefined);
+const TemplateManagerContext = createContext<
+  TemplateManagerContextValue | undefined
+>(undefined);
 
 export function TemplateManagerProvider({
   value,
   children,
 }: {
   value: TemplateManagerContextValue;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <TemplateManagerContext.Provider value={value}>

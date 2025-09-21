@@ -172,69 +172,67 @@ export default function SendGridTemplateManager() {
   }
 
   return (
-    <TemplateManagerProvider
-      value={{ selectedTemplate, setSelectedTemplate }}
-    >
+    <TemplateManagerProvider value={{ selectedTemplate, setSelectedTemplate }}>
       <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Mail className="h-8 w-8 text-primary" />
-              <div>
-                <h1 className="text-2xl font-bold text-foreground">
-                  Keeper Fluent Templates
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  {templates.length} templates loaded
-                </p>
-              </div>
-            </div>
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
-
-      <div className="container mx-auto p-6">
-        <ResizablePanelGroup
-          direction="horizontal"
-          className="h-[calc(100vh-200px)] rounded-lg border border-border bg-card/30 backdrop-blur-sm"
-        >
-          <ResizablePanel
-            defaultSize={28}
-            minSize={18}
-            className="overflow-hidden border-r border-border/70"
-          >
-                <TemplateList templates={templates} />
-          </ResizablePanel>
-          <ResizableHandle className="relative w-3 cursor-col-resize border-r border-border/70">
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="h-12 w-[2px] rounded-full bg-border" />
-            </div>
-          </ResizableHandle>
-          <ResizablePanel
-            defaultSize={72}
-            minSize={45}
-            className="overflow-hidden"
-          >
-            {selectedTemplate ? (
-              <TemplateEditor apiKey={apiKey || defaultApiKey} />
-            ) : (
-              <Card className="flex h-full items-center justify-center border-none bg-transparent shadow-none">
-                <CardContent className="text-center">
-                  <Code className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-foreground mb-2">
-                    Select a Template
-                  </h3>
-                  <p className="text-muted-foreground">
-                    Choose a template from the list to view its code and preview
+        <header className="border-b border-border bg-card">
+          <div className="container mx-auto px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div>
+                  <h1 className="text-2xl font-bold text-foreground">
+                    Keeper Fluent Templates
+                  </h1>
+                  <p className="text-sm text-muted-foreground">
+                    {templates.length} templates loaded
                   </p>
-                </CardContent>
-              </Card>
-            )}
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      </div>
+                </div>
+              </div>
+              <ThemeToggle />
+            </div>
+          </div>
+        </header>
+
+        <div className="container mx-auto p-6">
+          <ResizablePanelGroup
+            direction="horizontal"
+            className="h-[calc(100vh-200px)] rounded-lg border border-border bg-card/30 backdrop-blur-sm"
+          >
+            <ResizablePanel
+              defaultSize={28}
+              minSize={18}
+              className="overflow-hidden border-r border-border/70"
+            >
+              <TemplateList templates={templates} />
+            </ResizablePanel>
+            <ResizableHandle className="relative w-3 cursor-col-resize border-r border-border/70">
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div className="h-12 w-[2px] rounded-full bg-border" />
+              </div>
+            </ResizableHandle>
+            <ResizablePanel
+              defaultSize={72}
+              minSize={45}
+              className="overflow-hidden"
+            >
+              {selectedTemplate ? (
+                <TemplateEditor apiKey={apiKey || defaultApiKey} />
+              ) : (
+                <Card className="flex h-full items-center justify-center border-none bg-transparent shadow-none">
+                  <CardContent className="text-center">
+                    <Code className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-foreground mb-2">
+                      Select a Template
+                    </h3>
+                    <p className="text-muted-foreground">
+                      Choose a template from the list to view its code and
+                      preview
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        </div>
       </div>
     </TemplateManagerProvider>
   );

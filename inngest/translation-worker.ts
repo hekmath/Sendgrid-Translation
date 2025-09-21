@@ -30,8 +30,6 @@ const translationOutputSchema = z.object({
 
 async function runTranslation({
   taskId,
-  templateId,
-  templateVersionId,
   languageCode,
   htmlContent,
   subject,
@@ -40,8 +38,6 @@ async function runTranslation({
   isRetranslate,
 }: {
   taskId: string;
-  templateId: string;
-  templateVersionId: string;
   languageCode: LanguageCode;
   htmlContent: string;
   subject: string;
@@ -49,44 +45,25 @@ async function runTranslation({
   translationId?: string;
   isRetranslate: boolean;
 }) {
-  let translationRecord = null;
-
-  if (isRetranslate) {
-    if (!translationId) {
-      throw new Error('Missing translationId for retranslation request');
-    }
-
-    const existing = await dbService.templateTranslations.findById(
-      translationId
-    );
-    if (!existing) {
-      throw new Error(`Translation ${translationId} not found`);
-    }
-
-    translationRecord = existing;
-
-    await dbService.templateTranslations.update(existing.id, {
-      status: 'processing',
-      errorMessage: null,
-      updatedAt: new Date(),
-    });
-  } else {
-    const nextVersion = await dbService.templateTranslations.getNextVersion(
-      templateId,
-      templateVersionId,
-      languageCode
-    );
-    translationRecord = await dbService.templateTranslations.create({
-      taskId,
-      templateId,
-      templateVersionId,
-      languageCode,
-      originalHtml: htmlContent,
-      originalSubject: subject,
-      status: 'processing',
-      version: nextVersion,
-    });
+  if (!translationId) {
+    const context = isRetranslate ? 'retranslation' : 'translation';
+    throw new Error(`Missing translationId for ${context} request`);
   }
+
+  const translationRecord = await dbService.templateTranslations.findById(
+    translationId
+  );
+  if (!translationRecord) {
+    throw new Error(`Translation ${translationId} not found`);
+  }
+
+  await dbService.templateTranslations.update(translationRecord.id, {
+    status: 'processing',
+    errorMessage: null,
+    retranslateReason: reason ?? translationRecord.retranslateReason,
+    updatedAt: new Date(),
+  });
+  await dbService.translationTasks.syncCounts(taskId);
 
   const targetLanguage = getLanguageByCode(languageCode);
   if (!targetLanguage) {
@@ -132,8 +109,7 @@ Provide clean translations while preserving all technical elements.`,
       status: 'completed',
       retranslateReason: reason ?? translationRecord.retranslateReason,
     });
-
-    await dbService.translationTasks.incrementCompleted(taskId);
+    await dbService.translationTasks.syncCounts(taskId);
 
     return {
       success: true,
@@ -150,8 +126,7 @@ Provide clean translations while preserving all technical elements.`,
       errorMessage,
       retranslateReason: reason ?? translationRecord.retranslateReason,
     });
-
-    await dbService.translationTasks.incrementFailed(taskId);
+    await dbService.translationTasks.syncCounts(taskId);
 
     throw error;
   }
@@ -182,16 +157,50 @@ export const translateLanguage = inngest.createFunction(
       `Translating template ${templateId} to ${languageCode} for task ${taskId}`
     );
 
-    const result = await step.run(`translate-${languageCode}`, async () => {
-      try {
-        return await runTranslation({
+    const { translationId } = await step.run(
+      `prepare-translation-${languageCode}`,
+      async () => {
+        const existing =
+          await dbService.templateTranslations.findLatestByTaskAndLanguage(
+            taskId,
+            languageCode
+          );
+
+        if (existing) {
+          return { translationId: existing.id };
+        }
+
+        const nextVersion = await dbService.templateTranslations.getNextVersion(
+          templateId,
+          templateVersionId,
+          languageCode
+        );
+
+        const created = await dbService.templateTranslations.create({
           taskId,
           templateId,
           templateVersionId,
           languageCode,
+          originalHtml: htmlContent,
+          originalSubject: subject,
+          status: 'processing',
+          version: nextVersion,
+        });
+
+        await dbService.translationTasks.syncCounts(taskId);
+
+        return { translationId: created.id };
+      }
+    );
+
+    const result = await step.run(`translate-${languageCode}`, async () => {
+      try {
+        return await runTranslation({
+          taskId,
+          languageCode,
           htmlContent,
           subject,
-          translationId: undefined,
+          translationId,
           reason: undefined,
           isRetranslate: false,
         });
@@ -283,16 +292,33 @@ export const retranslateLanguage = inngest.createFunction(
       `Retranslating template ${templateId} to ${languageCode} for task ${taskId}`
     );
 
+    const { translationId: resolvedTranslationId } = await step.run(
+      `prepare-retranslation-${languageCode}`,
+      async () => {
+        if (!translationId) {
+          throw new Error('Missing translationId for retranslation event');
+        }
+
+        const existing = await dbService.templateTranslations.findById(
+          translationId
+        );
+
+        if (!existing) {
+          throw new Error(`Translation ${translationId} not found`);
+        }
+
+        return { translationId: existing.id };
+      }
+    );
+
     const result = await step.run(`retranslate-${languageCode}`, async () => {
       try {
         return await runTranslation({
           taskId,
-          templateId,
-          templateVersionId,
           languageCode,
           htmlContent,
           subject,
-          translationId,
+          translationId: resolvedTranslationId,
           reason,
           isRetranslate: true,
         });
