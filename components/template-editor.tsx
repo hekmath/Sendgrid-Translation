@@ -11,44 +11,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Code,
-  Eye,
-  Settings,
-  FileText,
-  Calendar,
-  User,
-  Languages,
-} from 'lucide-react';
+import { Code, Eye, FileText, Calendar, User, Languages } from 'lucide-react';
 import { CodeEditor } from '@/components/code-editor';
 import { TemplatePreview } from '@/components/template-preview';
 import { TranslationPanel } from '@/components/translation-panel';
 import type { TemplateTranslation } from '@/lib/db/schema';
-
-interface SendGridTemplateVersion {
-  id: string;
-  template_id: string;
-  active: number;
-  name: string;
-  html_content: string;
-  plain_content: string;
-  generate_plain_content: boolean;
-  subject: string;
-  updated_at: string;
-  editor: string;
-  test_data: string;
-}
-
-interface SendGridTemplate {
-  id: string;
-  name: string;
-  generation: string;
-  updated_at: string;
-  versions: SendGridTemplateVersion[];
-}
+import { useTemplateManager } from '@/providers/template-manager-context';
+import type { SendGridTemplate } from '@/lib/types/sendgrid';
 
 interface TemplateEditorProps {
-  template: SendGridTemplate;
   apiKey: string;
 }
 
@@ -56,9 +27,12 @@ interface ParsedTestData {
   [key: string]: string | number | boolean | ParsedTestData;
 }
 
-export function TemplateEditor({ template, apiKey }: TemplateEditorProps) {
+export function TemplateEditor({ apiKey }: TemplateEditorProps) {
+  const { selectedTemplate } = useTemplateManager();
+  const template = selectedTemplate;
+
   const [activeVersion, setActiveVersion] =
-    useState<SendGridTemplateVersion | null>(null);
+    useState<SendGridTemplate['versions'][number] | null>(null);
   const [testData, setTestData] = useState<ParsedTestData>({});
   const [activeTab, setActiveTab] = useState('preview');
   const [selectedTranslation, setSelectedTranslation] =
@@ -66,6 +40,11 @@ export function TemplateEditor({ template, apiKey }: TemplateEditorProps) {
 
   // Initialize active version
   useEffect(() => {
+    if (!template) {
+      setActiveVersion(null);
+      return;
+    }
+
     const defaultVersion =
       template.versions.find((v) => v.active === 1) || template.versions[0];
     setActiveVersion(defaultVersion || null);
@@ -151,12 +130,13 @@ export function TemplateEditor({ template, apiKey }: TemplateEditorProps) {
 
   const handleVersionChange = useCallback(
     (versionId: string) => {
+      if (!template) return;
       const version = template.versions.find((v) => v.id === versionId);
       if (version) {
         setActiveVersion(version);
       }
     },
-    [template.versions]
+    [template]
   );
 
   const handleTranslationSelect = useCallback(
@@ -187,6 +167,22 @@ export function TemplateEditor({ template, apiKey }: TemplateEditorProps) {
     ],
     []
   );
+
+  if (!template) {
+    return (
+      <div className="flex h-full items-center justify-center p-8">
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-muted rounded-full mb-4">
+            <FileText className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <h3 className="text-lg font-semibold mb-2">Select a Template</h3>
+          <p className="text-muted-foreground">
+            Choose a template from the list to load its versions and translations.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!activeVersion) {
     return (

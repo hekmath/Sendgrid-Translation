@@ -20,26 +20,9 @@ import {
   ResizablePanelGroup,
   ResizableHandle,
 } from '@/components/ui/resizable';
-
-interface SendGridTemplate {
-  id: string;
-  name: string;
-  generation: string;
-  updated_at: string;
-  versions: Array<{
-    id: string;
-    template_id: string;
-    active: number;
-    name: string;
-    html_content: string;
-    plain_content: string;
-    generate_plain_content: boolean;
-    subject: string;
-    updated_at: string;
-    editor: string;
-    test_data: string;
-  }>;
-}
+import { TemplateManagerProvider } from '@/providers/template-manager-context';
+import type { SendGridTemplate } from '@/lib/types/sendgrid';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 export default function SendGridTemplateManager() {
   const defaultApiKey = (process.env.NEXT_PUBLIC_SENDGRID_API_KEY || '').trim();
@@ -80,7 +63,17 @@ export default function SendGridTemplateManager() {
         }
 
         const data = await response.json();
-        setTemplates(data.result || []);
+        const fetchedTemplates: SendGridTemplate[] = data.result || [];
+        setTemplates(fetchedTemplates);
+        setSelectedTemplate((current) => {
+          if (current) {
+            const updated = fetchedTemplates.find((t) => t.id === current.id);
+            if (updated) {
+              return updated;
+            }
+          }
+          return fetchedTemplates[0] ?? null;
+        });
         setIsConfigured(true);
         setApiKey(resolvedKey);
       } catch (err) {
@@ -102,10 +95,6 @@ export default function SendGridTemplateManager() {
     autoConfigureRef.current = true;
     void fetchTemplates(defaultApiKey);
   }, [defaultApiKey, fetchTemplates]);
-
-  const handleTemplateSelect = (template: SendGridTemplate) => {
-    setSelectedTemplate(template);
-  };
 
   if (!isConfigured) {
     return (
@@ -183,7 +172,10 @@ export default function SendGridTemplateManager() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <TemplateManagerProvider
+      value={{ selectedTemplate, setSelectedTemplate }}
+    >
+      <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
@@ -198,19 +190,7 @@ export default function SendGridTemplateManager() {
                 </p>
               </div>
             </div>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsConfigured(false);
-                setTemplates([]);
-                setSelectedTemplate(null);
-                setError('');
-                setApiKey(defaultApiKey);
-              }}
-            >
-              <Settings className="mr-2 h-4 w-4" />
-              Reconfigure
-            </Button>
+            <ThemeToggle />
           </div>
         </div>
       </header>
@@ -225,11 +205,7 @@ export default function SendGridTemplateManager() {
             minSize={18}
             className="overflow-hidden border-r border-border/70"
           >
-            <TemplateList
-              templates={templates}
-              selectedTemplate={selectedTemplate}
-              onTemplateSelect={handleTemplateSelect}
-            />
+                <TemplateList templates={templates} />
           </ResizablePanel>
           <ResizableHandle className="relative w-3 cursor-col-resize border-r border-border/70">
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -242,10 +218,7 @@ export default function SendGridTemplateManager() {
             className="overflow-hidden"
           >
             {selectedTemplate ? (
-              <TemplateEditor
-                template={selectedTemplate}
-                apiKey={apiKey || defaultApiKey}
-              />
+              <TemplateEditor apiKey={apiKey || defaultApiKey} />
             ) : (
               <Card className="flex h-full items-center justify-center border-none bg-transparent shadow-none">
                 <CardContent className="text-center">
@@ -262,6 +235,7 @@ export default function SendGridTemplateManager() {
           </ResizablePanel>
         </ResizablePanelGroup>
       </div>
-    </div>
+      </div>
+    </TemplateManagerProvider>
   );
 }

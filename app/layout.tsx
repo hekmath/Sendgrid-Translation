@@ -6,6 +6,7 @@ import { QueryProvider } from '@/providers/query-provider';
 import { TranslationActivityDrawer } from '@/components/translation-activity-drawer';
 import { Toaster } from '@/components/ui/sonner';
 import './globals.css';
+import { ThemeProvider } from '@/components/theme-provider';
 
 export const metadata: Metadata = {
   title: 'Keeper Fluent Templates',
@@ -18,10 +19,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
         <QueryProvider>
-          {children}
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            {children}
+          </ThemeProvider>
+
           <TranslationActivityDrawer />
           <Toaster />
         </QueryProvider>

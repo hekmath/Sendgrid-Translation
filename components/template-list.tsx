@@ -24,50 +24,25 @@ import {
   Code,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-interface SendGridTemplateVersion {
-  id: string;
-  template_id: string;
-  active: number;
-  name: string;
-  html_content: string;
-  plain_content: string;
-  generate_plain_content: boolean;
-  subject: string;
-  updated_at: string;
-  editor: string;
-  test_data: string;
-}
-
-interface SendGridTemplate {
-  id: string;
-  name: string;
-  generation: string;
-  updated_at: string;
-  versions: SendGridTemplateVersion[];
-}
+import { useTemplateManager } from '@/providers/template-manager-context';
+import type { SendGridTemplate } from '@/lib/types/sendgrid';
 
 interface TemplateListProps {
   templates: SendGridTemplate[];
-  selectedTemplate: SendGridTemplate | null;
-  onTemplateSelect: (template: SendGridTemplate) => void;
 }
 
 type SortOption = 'name' | 'updated' | 'versions';
 type GenerationFilter = 'all' | 'legacy' | 'dynamic';
 
 interface TemplateStats {
-  activeVersion: SendGridTemplateVersion | null;
+  activeVersion: SendGridTemplate['versions'][number] | null;
   totalVersions: number;
   hasContent: boolean;
   lastModified: Date;
 }
 
-export function TemplateList({
-  templates,
-  selectedTemplate,
-  onTemplateSelect,
-}: TemplateListProps) {
+export function TemplateList({ templates }: TemplateListProps) {
+  const { selectedTemplate, setSelectedTemplate } = useTemplateManager();
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('updated');
   const [generationFilter, setGenerationFilter] =
@@ -94,18 +69,27 @@ export function TemplateList({
   );
 
   const filteredAndSortedTemplates = useMemo(() => {
-    let filtered = templates;
+    let filtered = [...templates];
 
     // Apply search filter
     if (searchTerm.trim()) {
       const search = searchTerm.toLowerCase();
       filtered = filtered.filter((template) => {
         const stats = getTemplateStats(template);
+        const matchesName = template.name.toLowerCase().includes(search);
+        const matchesId = template.id.toLowerCase().includes(search);
+        const matchesActiveSubject = stats.activeVersion?.subject
+          ?.toLowerCase()
+          .includes(search);
+        const matchesVersionName = template.versions.some((version) =>
+          version.name.toLowerCase().includes(search)
+        );
+
         return (
-          template.name.toLowerCase().includes(search) ||
-          template.id.toLowerCase().includes(search) ||
-          stats.activeVersion?.subject.toLowerCase().includes(search) ||
-          template.versions.some((v) => v.name.toLowerCase().includes(search))
+          matchesName ||
+          matchesId ||
+          Boolean(matchesActiveSubject) ||
+          matchesVersionName
         );
       });
     }
@@ -283,7 +267,7 @@ export function TemplateList({
                       ? 'bg-primary/5 border-primary shadow-sm ring-1 ring-primary/20'
                       : 'bg-card border-border hover:bg-accent/50 hover:border-accent-foreground/20'
                   )}
-                  onClick={() => onTemplateSelect(template)}
+                  onClick={() => setSelectedTemplate(template)}
                 >
                   <div className="space-y-3">
                     {/* Header */}
