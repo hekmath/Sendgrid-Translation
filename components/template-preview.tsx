@@ -201,7 +201,8 @@ export function TemplatePreview({
     }
   }, [translation?.id, isTranslationAvailable]);
 
-  const showTranslation = contentMode === 'translation' && isTranslationAvailable;
+  const showTranslation =
+    contentMode === 'translation' && isTranslationAvailable;
 
   const translationInProgress = Boolean(
     translation && translation.status !== 'completed'
@@ -423,7 +424,10 @@ export function TemplatePreview({
               </Badge>
             )}
             {translation?.verifiedAt && (
-              <Badge variant="secondary" className="flex items-center gap-1 text-xs">
+              <Badge
+                variant="secondary"
+                className="flex items-center gap-1 text-xs"
+              >
                 <CheckCircle className="h-3 w-3" />
                 Verified
               </Badge>
@@ -579,16 +583,16 @@ export function TemplatePreview({
 
       {/* Preview Content */}
       <div className="flex-1 overflow-hidden bg-muted/20 p-4">
-        <Card className="flex h-full flex-col border-none bg-transparent shadow-none">
-          <CardContent className="flex h-full flex-col overflow-hidden p-0">
-            <div className="flex h-full w-full justify-center overflow-hidden rounded-xl border border-border/70 bg-background shadow-lg">
+        <Card className="flex flex-col border-none bg-transparent shadow-none">
+          <CardContent className="flex flex-col overflow-hidden p-0">
+            <div className="flex w-full justify-center overflow-hidden rounded-xl border border-border/70 bg-background shadow-lg">
               <div
-                className={`flex h-full w-full justify-center overflow-auto p-4 ${currentViewport.width}`}
+                className={`flex w-full justify-center overflow-auto p-4 ${currentViewport.width}`}
               >
-                <div className="flex h-full w-full max-w-full items-stretch justify-center overflow-hidden rounded-lg border border-border bg-white shadow-sm">
+                <div className="flex w-full max-w-full items-stretch justify-center overflow-hidden rounded-lg border border-border bg-white shadow-sm">
                   <iframe
                     ref={iframeRef}
-                    className="h-full w-full border-0"
+                    className="min-h-[960px] w-full border-0"
                     title="Email Template Preview"
                     sandbox="allow-same-origin allow-forms allow-popups"
                   />
