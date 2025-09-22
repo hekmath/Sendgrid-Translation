@@ -43,6 +43,50 @@ type TranslationOutcome =
       errorMessage: string;
     };
 
+async function finalizeTaskStatus(
+  taskId: string,
+  totalLanguages: number
+): Promise<void> {
+  const task = await dbService.translationTasks.findById(taskId);
+
+  if (!task) {
+    console.error(`Task ${taskId} not found during completion check`);
+    return;
+  }
+
+  const expectedTotal = task.totalLanguages ?? totalLanguages;
+  const totalCompleted = task.completedLanguages + task.failedLanguages;
+
+  console.log(
+    `Task ${taskId} progress: ${totalCompleted}/${expectedTotal} completed (${task.completedLanguages} success, ${task.failedLanguages} failed)`
+  );
+
+  if (totalCompleted < expectedTotal) {
+    return;
+  }
+
+  if (task.status === 'completed' || task.status === 'failed') {
+    return;
+  }
+
+  const hasFailures = task.failedLanguages > 0;
+  const errorMessage = hasFailures
+    ? `${task.failedLanguages} language${
+        task.failedLanguages === 1 ? '' : 's'
+      } failed`
+    : undefined;
+
+  await dbService.translationTasks.updateStatus(
+    taskId,
+    hasFailures ? 'failed' : 'completed',
+    errorMessage
+  );
+
+  console.log(
+    `All translations finalized for task ${taskId} (${task.completedLanguages} success, ${task.failedLanguages} failed)`
+  );
+}
+
 async function runTranslation({
   taskId,
   languageCode,
@@ -183,6 +227,10 @@ export const translateLanguage = inngest.createFunction(
       `Translating template ${templateId} to ${languageCode} for task ${taskId}`
     );
 
+    await step.run('mark-task-processing', async () => {
+      await dbService.translationTasks.updateStatus(taskId, 'processing');
+    });
+
     const { translationId } = await step.run(
       `prepare-translation-${languageCode}`,
       async () => {
@@ -236,45 +284,7 @@ export const translateLanguage = inngest.createFunction(
       // Use a small delay to avoid race conditions with database updates
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      const task = await dbService.translationTasks.findById(taskId);
-      if (!task) {
-        console.error(`Task ${taskId} not found during completion check`);
-        return;
-      }
-
-      const totalCompleted = task.completedLanguages + task.failedLanguages;
-
-      console.log(
-        `Task ${taskId} progress: ${totalCompleted}/${totalLanguages} completed (${task.completedLanguages} success, ${task.failedLanguages} failed)`
-      );
-
-      if (totalCompleted === totalLanguages) {
-        console.log(
-          `All translations completed for task ${taskId}. Sending completion event.`
-        );
-
-        // Send completion event with explicit taskId matching
-        await inngest.send({
-          name: 'translation/job-completed',
-          data: {
-            taskId: taskId,
-            success: task.failedLanguages === 0,
-            error:
-              task.failedLanguages > 0
-                ? `${task.failedLanguages} languages failed`
-                : undefined,
-            completedLanguages: task.completedLanguages,
-            failedLanguages: task.failedLanguages,
-            totalLanguages: totalLanguages,
-          },
-        });
-
-        console.log(`Sent completion event for task ${taskId}`);
-      } else {
-        console.log(
-          `Task ${taskId} not yet complete: ${totalCompleted}/${totalLanguages}`
-        );
-      }
+      await finalizeTaskStatus(taskId, totalLanguages);
     });
 
     return result;
@@ -346,43 +356,7 @@ export const retranslateLanguage = inngest.createFunction(
     await step.run('retranslate-check-completion', async () => {
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      const task = await dbService.translationTasks.findById(taskId);
-      if (!task) {
-        console.error(`Task ${taskId} not found during completion check`);
-        return;
-      }
-
-      const totalCompleted = task.completedLanguages + task.failedLanguages;
-
-      if (totalCompleted === totalLanguages) {
-        const taskStatus =
-          task.failedLanguages > 0 ? 'failed' : ('completed' as const);
-        const errorMessage =
-          task.failedLanguages > 0
-            ? `${task.failedLanguages} languages failed`
-            : undefined;
-
-        await dbService.translationTasks.updateStatus(
-          taskId,
-          taskStatus,
-          errorMessage
-        );
-
-        await inngest.send({
-          name: 'translation/job-completed',
-          data: {
-            taskId: taskId,
-            success: task.failedLanguages === 0,
-            error:
-              task.failedLanguages > 0
-                ? `${task.failedLanguages} languages failed`
-                : undefined,
-            completedLanguages: task.completedLanguages,
-            failedLanguages: task.failedLanguages,
-            totalLanguages: totalLanguages,
-          },
-        });
-      }
+      await finalizeTaskStatus(taskId, totalLanguages);
     });
 
     return result;

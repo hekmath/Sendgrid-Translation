@@ -37,19 +37,23 @@ export async function POST(request: NextRequest) {
 
     taskId = task.id;
 
-    // Send event to Inngest coordinator
-    await inngest.send({
-      name: 'translation/coordinate',
-      data: {
-        taskId: task.id,
-        templateId: validatedData.templateId,
-        templateName: validatedData.templateName,
-        templateVersionId: validatedData.templateVersionId,
-        htmlContent: validatedData.htmlContent,
-        subject: validatedData.subject,
-        targetLanguages: validatedData.targetLanguages as LanguageCode[],
-      },
-    });
+    // Fan out per-language translation jobs directly; leave task queued until a worker starts
+    await Promise.all(
+      validatedData.targetLanguages.map((languageCode) =>
+        inngest.send({
+          name: 'translation/translate-language',
+          data: {
+            taskId: task.id,
+            templateId: validatedData.templateId,
+            templateVersionId: validatedData.templateVersionId,
+            languageCode: languageCode as LanguageCode,
+            htmlContent: validatedData.htmlContent,
+            subject: validatedData.subject,
+            totalLanguages: validatedData.targetLanguages.length,
+          },
+        })
+      )
+    );
 
     return NextResponse.json({
       success: true,
