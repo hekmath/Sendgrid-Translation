@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useUser } from '@clerk/nextjs';
 import {
   Card,
   CardContent,
@@ -9,10 +10,8 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Mail, Code, Settings } from 'lucide-react';
+import { Loader2, Mail, Code, UserX } from 'lucide-react';
 import { TemplateList } from '@/components/template-list';
 import { TemplateEditor } from '@/components/template-editor';
 import {
@@ -22,11 +21,10 @@ import {
 } from '@/components/ui/resizable';
 import { TemplateManagerProvider } from '@/providers/template-manager-context';
 import type { SendGridTemplate } from '@/lib/types/sendgrid';
-import { ThemeToggle } from '@/components/theme-toggle';
+import { UserMenu } from '@/components/user-menu';
 
 export default function SendGridTemplateManager() {
-  const defaultApiKey = (process.env.NEXT_PUBLIC_SENDGRID_API_KEY || '').trim();
-  const [apiKey, setApiKey] = useState(defaultApiKey);
+  const { isLoaded, isSignedIn, user } = useUser();
   const [templates, setTemplates] = useState<SendGridTemplate[]>([]);
   const [selectedTemplate, setSelectedTemplate] =
     useState<SendGridTemplate | null>(null);
@@ -35,66 +33,97 @@ export default function SendGridTemplateManager() {
   const [isConfigured, setIsConfigured] = useState(false);
   const autoConfigureRef = useRef(false);
 
-  const fetchTemplates = useCallback(
-    async (override?: string) => {
-      const resolvedKey = (override ?? apiKey ?? '').trim() || defaultApiKey;
+  const fetchTemplates = useCallback(async () => {
+    setLoading(true);
+    setError('');
 
-      if (!resolvedKey) {
-        setError('Please provide a SendGrid API key');
-        return;
+    try {
+      const response = await fetch('/api/sendgrid/templates', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch templates');
       }
 
-      setLoading(true);
-      setError('');
-
-      try {
-        const payload =
-          resolvedKey === defaultApiKey ? {} : { apiKey: resolvedKey };
-        const response = await fetch('/api/sendgrid/templates', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch templates');
-        }
-
-        const data = await response.json();
-        const fetchedTemplates: SendGridTemplate[] = data.result || [];
-        setTemplates(fetchedTemplates);
-        setSelectedTemplate((current) => {
-          if (current) {
-            const updated = fetchedTemplates.find((t) => t.id === current.id);
-            if (updated) {
-              return updated;
-            }
+      const data = await response.json();
+      const fetchedTemplates: SendGridTemplate[] = data.result || [];
+      setTemplates(fetchedTemplates);
+      setSelectedTemplate((current) => {
+        if (current) {
+          const updated = fetchedTemplates.find((t) => t.id === current.id);
+          if (updated) {
+            return updated;
           }
-          return fetchedTemplates[0] ?? null;
-        });
-        setIsConfigured(true);
-        setApiKey(resolvedKey);
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : 'Failed to fetch templates'
-        );
-      } finally {
-        setLoading(false);
-      }
-    },
-    [apiKey, defaultApiKey]
-  );
+        }
+        return fetchedTemplates[0] ?? null;
+      });
+      setIsConfigured(true);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Failed to fetch templates'
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (!defaultApiKey || autoConfigureRef.current) {
+    if (!isLoaded || !isSignedIn || autoConfigureRef.current) {
       return;
     }
 
     autoConfigureRef.current = true;
-    void fetchTemplates(defaultApiKey);
-  }, [defaultApiKey, fetchTemplates]);
+    void fetchTemplates();
+  }, [isLoaded, isSignedIn, fetchTemplates]);
+
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isSignedIn) {
+    return (
+      <div className="min-h-screen bg-background p-6">
+        <div className="max-w-2xl mx-auto">
+          <div className="text-center mb-8">
+            <Mail className="h-12 w-12 text-primary mx-auto mb-4" />
+            <h1 className="text-3xl font-bold text-foreground mb-2">unsend</h1>
+            <p className="text-muted-foreground">
+              Sign in to access your SendGrid template manager
+            </p>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <UserX className="h-5 w-5" />
+                Authentication Required
+              </CardTitle>
+              <CardDescription>
+                This is an internal tool. Please sign in with your authorized
+                account.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Button
+                onClick={() => (window.location.href = '/sign-in')}
+                className="w-full"
+              >
+                Sign In
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   if (!isConfigured) {
     return (
@@ -102,68 +131,32 @@ export default function SendGridTemplateManager() {
         <div className="max-w-2xl mx-auto">
           <div className="text-center mb-8">
             <Mail className="h-12 w-12 text-primary mx-auto mb-4" />
-            <h1 className="text-3xl font-bold text-foreground mb-2">
-              Keeper Fluent Templates
-            </h1>
+            <h1 className="text-3xl font-bold text-foreground mb-2">unsend</h1>
             <p className="text-muted-foreground">
-              Connect to your SendGrid account to manage and preview your email
-              templates
+              Welcome {user?.firstName}! Loading your SendGrid templates...
             </p>
           </div>
 
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Settings className="h-5 w-5" />
-                Configure SendGrid API
-              </CardTitle>
-              <CardDescription>
-                Enter your SendGrid API key to get started. Make sure it has
-                template read permissions.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="apiKey">SendGrid API Key</Label>
-                <Input
-                  id="apiKey"
-                  type="password"
-                  placeholder="SG.xxxxxxxxxxxxxxxx"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                />
-              </div>
-
-              {defaultApiKey && (
-                <p className="text-xs text-muted-foreground">
-                  Loaded from{' '}
-                  <code className="rounded bg-muted px-1">
-                    NEXT_PUBLIC_SENDGRID_API_KEY
-                  </code>
-                  . Enter a value to override for this session.
-                </p>
-              )}
-
+            <CardContent className="space-y-4 pt-6">
               {error && (
                 <Alert variant="destructive">
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
 
-              <Button
-                onClick={() => fetchTemplates(apiKey || defaultApiKey)}
-                disabled={loading || !(apiKey || defaultApiKey)}
-                className="w-full"
-              >
+              <div className="flex items-center justify-center">
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Connecting...
+                    Loading templates...
                   </>
                 ) : (
-                  'Connect to SendGrid'
+                  <Button onClick={fetchTemplates} className="w-full">
+                    Retry Loading Templates
+                  </Button>
                 )}
-              </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -179,15 +172,13 @@ export default function SendGridTemplateManager() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div>
-                  <h1 className="text-2xl font-bold text-foreground">
-                    Keeper Fluent Templates
-                  </h1>
+                  <h1 className="text-2xl font-bold text-foreground">unsend</h1>
                   <p className="text-sm text-muted-foreground">
-                    {templates.length} templates loaded
+                    Translate Sendgrid Email Templates
                   </p>
                 </div>
               </div>
-              <ThemeToggle />
+              <UserMenu />
             </div>
           </div>
         </header>
@@ -215,7 +206,7 @@ export default function SendGridTemplateManager() {
               className="overflow-hidden"
             >
               {selectedTemplate ? (
-                <TemplateEditor apiKey={apiKey || defaultApiKey} />
+                <TemplateEditor />
               ) : (
                 <Card className="flex h-full items-center justify-center border-none bg-transparent shadow-none">
                   <CardContent className="text-center">

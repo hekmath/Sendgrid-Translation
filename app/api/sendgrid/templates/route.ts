@@ -1,9 +1,15 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { auth } from "@clerk/nextjs/server"
 
-export async function POST(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    const { apiKey: incomingKey } = await request.json()
-    const resolvedApiKey = (incomingKey as string | undefined)?.trim() || process.env.SENDGRID_API_KEY || process.env.NEXT_PUBLIC_SENDGRID_API_KEY
+    const { userId } = await auth()
+
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const resolvedApiKey = process.env.SENDGRID_API_KEY
 
     if (!resolvedApiKey) {
       return NextResponse.json({ error: "API key is required" }, { status: 400 })

@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^2.0.32",
+    "@clerk/nextjs": "^6.32.2",
     "@hookform/resolvers": "^5.2.2",
     "@neondatabase/serverless": "^1.0.1",
     "@radix-ui/react-accordion": "1.2.12",

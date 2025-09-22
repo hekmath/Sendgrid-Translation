@@ -19,15 +19,11 @@ import type { TemplateTranslation } from '@/lib/db/schema';
 import { useTemplateManager } from '@/providers/template-manager-context';
 import type { SendGridTemplate } from '@/lib/types/sendgrid';
 
-interface TemplateEditorProps {
-  apiKey: string;
-}
-
 interface ParsedTestData {
   [key: string]: string | number | boolean | ParsedTestData;
 }
 
-export function TemplateEditor({ apiKey }: TemplateEditorProps) {
+export function TemplateEditor() {
   const { selectedTemplate } = useTemplateManager();
   const template = selectedTemplate;
 

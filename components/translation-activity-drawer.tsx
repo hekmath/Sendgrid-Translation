@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useUser } from '@clerk/nextjs';
 import {
   Activity,
   CheckCircle,
@@ -69,6 +70,7 @@ function formatUpdatedAt(updatedAt: string | Date) {
 }
 
 export function TranslationActivityDrawer() {
+  const { isSignedIn } = useUser();
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
   const previousStatuses = useRef<Record<string, TranslationTask['status']>>({});
@@ -92,6 +94,7 @@ export function TranslationActivityDrawer() {
     refetchIntervalInBackground: true,
     staleTime: 0,
     refetchOnWindowFocus: true,
+    enabled: isSignedIn, // Only fetch when user is signed in
   });
 
   const debouncedSummaries = useDebouncedValue<TranslationTaskSummary[]>(
@@ -153,6 +156,11 @@ export function TranslationActivityDrawer() {
   }, [debouncedSummaries, queryClient]);
 
   const activeCount = activeSummaries.length;
+
+  // Don't render the component if user is not signed in
+  if (!isSignedIn) {
+    return null;
+  }
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>

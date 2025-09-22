@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { auth } from '@clerk/nextjs/server';
 import { inngest } from '@/inngest/client';
 import { dbService } from '@/lib/services/db-service';
 import type { LanguageCode } from '@/lib/constants/languages';
@@ -14,6 +15,11 @@ const startTranslationSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  const { userId } = await auth();
+
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   let taskId: string | null = null;
   try {
     const body = await request.json();

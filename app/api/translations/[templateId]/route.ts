@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 import { dbService } from '@/lib/services/db-service';
 
 interface RouteParams {
@@ -11,6 +12,11 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
+  const { userId } = await auth();
+
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const { templateId } = await params;
 
