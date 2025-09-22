@@ -58,10 +58,10 @@ export const dbService = {
     },
 
     async syncCounts(id: string): Promise<void> {
-      const [counts] = await db
+      const translations = await db
         .select({
-          completed: sql<number>`SUM(CASE WHEN ${templateTranslations.status} = 'completed' THEN 1 ELSE 0 END)`,
-          failed: sql<number>`SUM(CASE WHEN ${templateTranslations.status} = 'failed' THEN 1 ELSE 0 END)`,
+          languageCode: templateTranslations.languageCode,
+          status: templateTranslations.status,
         })
         .from(templateTranslations)
         .where(
@@ -69,10 +69,30 @@ export const dbService = {
             eq(templateTranslations.taskId, id),
             isNull(templateTranslations.deletedAt)
           )
+        )
+        .orderBy(
+          templateTranslations.languageCode,
+          desc(templateTranslations.createdAt),
+          desc(templateTranslations.updatedAt)
         );
 
-      const completedCount = counts?.completed ?? 0;
-      const failedCount = counts?.failed ?? 0;
+      const seenLanguages = new Set<string>();
+      let completedCount = 0;
+      let failedCount = 0;
+
+      for (const translation of translations) {
+        if (seenLanguages.has(translation.languageCode)) {
+          continue;
+        }
+
+        seenLanguages.add(translation.languageCode);
+
+        if (translation.status === 'completed') {
+          completedCount += 1;
+        } else if (translation.status === 'failed') {
+          failedCount += 1;
+        }
+      }
 
       await db
         .update(translationTasks)

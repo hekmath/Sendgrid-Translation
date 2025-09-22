@@ -47,6 +47,8 @@ async function finalizeTaskStatus(
   taskId: string,
   totalLanguages: number
 ): Promise<void> {
+  await dbService.translationTasks.syncCounts(taskId);
+
   const task = await dbService.translationTasks.findById(taskId);
 
   if (!task) {
@@ -209,7 +211,7 @@ export const translateLanguage = inngest.createFunction(
     concurrency: {
       limit: 2,
     },
-    retries: 2,
+    retries: 1,
   },
   { event: 'translation/translate-language' },
   async ({ event, step }) => {
@@ -298,7 +300,7 @@ export const retranslateLanguage = inngest.createFunction(
     concurrency: {
       limit: 2,
     },
-    retries: 2,
+    retries: 1,
   },
   { event: 'translation/retranslate-language' },
   async ({ event, step }) => {
