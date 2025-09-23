@@ -86,6 +86,29 @@ const notEqualsHelper = function (
   return result;
 };
 
+const insertHelper = function (partialName: unknown) {
+  const label =
+    typeof partialName === 'string' && partialName.trim()
+      ? partialName.trim()
+      : undefined;
+
+  const escaped = label ? Handlebars.escapeExpression(label) : undefined;
+  const message = label
+    ? `Missing SendGrid partial: ${escaped}`
+    : 'Missing SendGrid partial';
+
+  const markup = `
+    <div style="border: 1px dashed #d1d5db; background: #f8fafc; color: #475569; padding: 12px; margin: 12px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; font-size: 13px; border-radius: 6px;">
+      <strong>${message}</strong>
+      <div style="margin-top:4px; font-size: 12px; color: #64748b;">
+        Preview placeholder for SendGrid {{{insert}}} helper${escaped ? `: <code>${escaped}</code>` : ''}
+      </div>
+    </div>
+  `;
+
+  return new Handlebars.SafeString(markup);
+};
+
 const buildDocumentMarkup = (html: string): string => {
   const trimmed = html.trim();
 
@@ -358,6 +381,7 @@ export function TemplatePreview({
             env: (key: unknown) => resolveEnvValue(key),
             equals: equalsHelper,
             notEquals: notEqualsHelper,
+            insert: insertHelper,
           },
         });
         setRenderedHTML(html);

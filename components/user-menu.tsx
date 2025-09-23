@@ -14,7 +14,11 @@ import {
 import { Button } from '@/components/ui/button';
 import { LogOut, Palette, Moon, Sun } from 'lucide-react';
 
-export function UserMenu() {
+interface UserMenuProps {
+  placement?: 'header' | 'sidebar';
+}
+
+export function UserMenu({ placement = 'header' }: UserMenuProps) {
   const { user } = useUser();
   const { signOut } = useClerk();
   const { resolvedTheme, setTheme } = useTheme();
@@ -39,17 +43,41 @@ export function UserMenu() {
     }
   };
 
+  const trigger = (
+    <Button
+      variant="ghost"
+      className={
+        placement === 'sidebar'
+          ? 'w-full justify-start gap-3 rounded-md px-2 py-2 text-left'
+          : 'relative h-10 w-10 rounded-full'
+      }
+    >
+      <Avatar className={placement === 'sidebar' ? 'h-9 w-9' : 'h-10 w-10'}>
+        <AvatarImage src={user.imageUrl} alt={user.fullName || 'User'} />
+        <AvatarFallback>{userInitials}</AvatarFallback>
+      </Avatar>
+      {placement === 'sidebar' && (
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">
+            {user.fullName || 'User'}
+          </p>
+          <p className="truncate text-xs text-muted-foreground">
+            {user.emailAddresses[0]?.emailAddress}
+          </p>
+        </div>
+      )}
+    </Button>
+  );
+
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-          <Avatar className="h-10 w-10">
-            <AvatarImage src={user.imageUrl} alt={user.fullName || 'User'} />
-            <AvatarFallback>{userInitials}</AvatarFallback>
-          </Avatar>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-56" align="end" forceMount>
+      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+      <DropdownMenuContent
+        className="w-56"
+        align={placement === 'sidebar' ? 'start' : 'end'}
+        sideOffset={placement === 'sidebar' ? 8 : 4}
+        forceMount
+      >
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
             <p className="text-sm font-medium leading-none">

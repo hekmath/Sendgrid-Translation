@@ -1,29 +1,31 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
-  Mail,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarInput,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarSeparator,
+} from '@/components/ui/sidebar';
+import {
   Calendar,
-  Layers,
-  Search,
-  Filter,
   CheckCircle,
-  FileText,
   Clock,
   Code,
+  FileText,
+  Filter,
+  Layers,
+  Mail,
+  Search,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import type { LucideIcon } from 'lucide-react';
 import { useTemplateManager } from '@/providers/template-manager-context';
 import type { SendGridTemplate } from '@/lib/types/sendgrid';
 
@@ -41,6 +43,27 @@ interface TemplateStats {
   lastModified: Date;
 }
 
+const MAX_TITLE_LENGTH = 35;
+
+const SORT_BUTTONS: Array<{
+  option: SortOption;
+  label: string;
+  icon: LucideIcon;
+}> = [
+  { option: 'updated', label: 'Updated', icon: Clock },
+  { option: 'name', label: 'Name', icon: FileText },
+  { option: 'versions', label: 'Versions', icon: Code },
+];
+
+const GENERATION_BUTTONS: Array<{
+  option: GenerationFilter;
+  label: string;
+}> = [
+  { option: 'all', label: 'All' },
+  { option: 'dynamic', label: 'Dynamic' },
+  { option: 'legacy', label: 'Legacy' },
+];
+
 export function TemplateList({ templates }: TemplateListProps) {
   const { selectedTemplate, setSelectedTemplate } = useTemplateManager();
   const [searchTerm, setSearchTerm] = useState('');
@@ -51,10 +74,10 @@ export function TemplateList({ templates }: TemplateListProps) {
   const getTemplateStats = useCallback(
     (template: SendGridTemplate): TemplateStats => {
       const activeVersion =
-        template.versions.find((v) => v.active === 1) || null;
+        template.versions.find((version) => version.active === 1) || null;
       const totalVersions = template.versions.length;
       const hasContent = template.versions.some(
-        (v) => v.html_content.trim().length > 0
+        (version) => version.html_content.trim().length > 0
       );
       const lastModified = new Date(template.updated_at);
 
@@ -71,7 +94,6 @@ export function TemplateList({ templates }: TemplateListProps) {
   const filteredAndSortedTemplates = useMemo(() => {
     let filtered = [...templates];
 
-    // Apply search filter
     if (searchTerm.trim()) {
       const search = searchTerm.toLowerCase();
       filtered = filtered.filter((template) => {
@@ -94,19 +116,20 @@ export function TemplateList({ templates }: TemplateListProps) {
       });
     }
 
-    // Apply generation filter
     if (generationFilter !== 'all') {
       filtered = filtered.filter((template) => {
         if (generationFilter === 'legacy') {
           return template.generation === 'legacy';
-        } else if (generationFilter === 'dynamic') {
+        }
+
+        if (generationFilter === 'dynamic') {
           return template.generation === 'dynamic';
         }
+
         return true;
       });
     }
 
-    // Apply sorting
     filtered.sort((a, b) => {
       switch (sortBy) {
         case 'name':
@@ -148,221 +171,171 @@ export function TemplateList({ templates }: TemplateListProps) {
 
   const templateCounts = useMemo(() => {
     const total = templates.length;
-    const legacy = templates.filter((t) => t.generation === 'legacy').length;
-    const dynamic = templates.filter((t) => t.generation === 'dynamic').length;
+    const legacy = templates.filter(
+      (template) => template.generation === 'legacy'
+    ).length;
+    const dynamic = templates.filter(
+      (template) => template.generation === 'dynamic'
+    ).length;
+
     return { total, legacy, dynamic };
   }, [templates]);
 
-  if (templates.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center p-8">
-        <div className="text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-muted rounded-full mb-4">
-            <Mail className="h-8 w-8 text-muted-foreground" />
-          </div>
-          <h3 className="text-lg font-semibold mb-2">No Templates Found</h3>
-          <p className="text-muted-foreground max-w-sm">
-            No SendGrid templates are available in your account, or they
-            couldn't be loaded.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  const listIsEmpty = templates.length === 0;
+  const noMatches = filteredAndSortedTemplates.length === 0 && !listIsEmpty;
 
   return (
-    <Card className="flex h-full flex-col border-none bg-transparent shadow-none">
-      <CardHeader className="pb-4">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <Mail className="h-5 w-5 text-primary" />
-            <CardTitle className="text-lg">Templates</CardTitle>
-          </div>
-          <Badge variant="outline" className="text-xs">
+    <div className="flex h-full flex-col">
+      <SidebarGroup className="pb-0">
+        <SidebarGroupLabel className="flex items-center gap-2 text-sm font-semibold">
+          Templates
+          <Badge variant="outline" className="ml-auto text-xs">
             {filteredAndSortedTemplates.length} of {templates.length}
           </Badge>
-        </div>
+        </SidebarGroupLabel>
+        <SidebarGroupContent className="space-y-4 px-0">
+          <p className="px-2 text-xs text-sidebar-foreground/70">
+            {templateCounts.dynamic} dynamic • {templateCounts.legacy} legacy
+            templates
+          </p>
 
-        <CardDescription className="text-sm">
-          {templateCounts.dynamic} dynamic, {templateCounts.legacy} legacy
-          templates
-        </CardDescription>
-
-        {/* Search */}
-        <div className="relative mt-3">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search templates..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 text-sm"
-          />
-        </div>
-
-        {/* Filters */}
-        <div className="flex items-center gap-2 mt-3">
-          <div className="flex items-center gap-1">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">Filter:</span>
+          <div className="relative px-2">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-sidebar-foreground/60" />
+            <SidebarInput
+              placeholder="Search templates..."
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              className="pl-10 text-sm"
+            />
           </div>
 
-          <div className="flex items-center gap-1">
-            {(['all', 'dynamic', 'legacy'] as const).map((filter) => (
-              <Button
-                key={filter}
-                variant={generationFilter === filter ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setGenerationFilter(filter)}
-                className="h-7 px-2 text-xs"
-              >
-                {filter === 'all'
-                  ? 'All'
-                  : filter === 'dynamic'
-                  ? 'Dynamic'
-                  : 'Legacy'}
-              </Button>
-            ))}
-          </div>
-        </div>
+          <div className="space-y-4 px-2 text-xs">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-sidebar-foreground/60">
+                <Filter className="h-3.5 w-3.5" />
+                <span>Generation</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {GENERATION_BUTTONS.map(({ option, label }) => (
+                  <Button
+                    key={option}
+                    size="sm"
+                    variant={
+                      generationFilter === option ? 'default' : 'outline'
+                    }
+                    onClick={() => setGenerationFilter(option)}
+                    className="h-8 w-full justify-center text-xs"
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+            </div>
 
-        {/* Sort */}
-        <div className="flex items-center gap-2 mt-2">
-          <span className="text-xs text-muted-foreground">Sort by:</span>
-          <div className="flex items-center gap-1">
-            {(
-              [
-                { key: 'updated', label: 'Updated', icon: Clock },
-                { key: 'name', label: 'Name', icon: FileText },
-                { key: 'versions', label: 'Versions', icon: Layers },
-              ] as const
-            ).map(({ key, label, icon: Icon }) => (
-              <Button
-                key={key}
-                variant={sortBy === key ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setSortBy(key)}
-                className="h-7 px-2 text-xs"
-              >
-                <Icon className="h-3 w-3 mr-1" />
-                {label}
-              </Button>
-            ))}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-sidebar-foreground/60">
+                <Layers className="h-3.5 w-3.5" />
+                <span>Sort By</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {SORT_BUTTONS.map(({ option, label, icon: Icon }) => (
+                  <Button
+                    key={option}
+                    size="sm"
+                    variant={sortBy === option ? 'default' : 'outline'}
+                    onClick={() => setSortBy(option)}
+                    className="h-8 w-full justify-center gap-1 text-xs"
+                  >
+                    <Icon className="h-3 w-3" />
+                    {label}
+                  </Button>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
-      </CardHeader>
+        </SidebarGroupContent>
+      </SidebarGroup>
 
-      <CardContent className="flex-1 p-0 overflow-hidden">
+      <SidebarSeparator className="mt-3" />
+
+      <div className="flex-1 overflow-hidden">
         <ScrollArea className="h-full">
-          <div className="space-y-2 p-4 pr-6">
-            {filteredAndSortedTemplates.map((template) => {
-              const stats = getTemplateStats(template);
-              const isSelected = selectedTemplate?.id === template.id;
-
-              return (
-                <div
-                  key={template.id}
-                  className={cn(
-                    'p-4 rounded-lg border cursor-pointer transition-all duration-200 hover:shadow-md',
-                    isSelected
-                      ? 'bg-primary/5 border-primary shadow-sm ring-1 ring-primary/20'
-                      : 'bg-card border-border hover:bg-accent/50 hover:border-accent-foreground/20'
-                  )}
-                  onClick={() => setSelectedTemplate(template)}
-                >
-                  <div className="space-y-3">
-                    {/* Header */}
-                    <div className="flex items-start justify-between">
-                      <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-sm text-foreground line-clamp-2 mb-1">
-                          {template.name}
-                        </h3>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Badge
-                            variant={getGenerationColor(template.generation)}
-                            className="text-xs"
-                          >
-                            {template.generation}
-                          </Badge>
-                          {stats.activeVersion && (
-                            <div className="flex items-center gap-1">
-                              <CheckCircle className="h-3 w-3 text-green-600" />
-                              <span className="text-xs text-green-600">
-                                Active
-                              </span>
-                            </div>
-                          )}
-                          {!stats.hasContent && (
-                            <Badge
-                              variant="outline"
-                              className="text-xs text-orange-600"
-                            >
-                              Empty
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Content Preview */}
-                    {stats.activeVersion?.subject && (
-                      <div className="text-xs text-muted-foreground line-clamp-1">
-                        <span className="font-medium">Subject:</span>{' '}
-                        {stats.activeVersion.subject}
-                      </div>
-                    )}
-
-                    {/* Metadata */}
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {formatDate(template.updated_at)}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Layers className="h-3 w-3" />
-                          {stats.totalVersions} version
-                          {stats.totalVersions !== 1 ? 's' : ''}
-                        </div>
-                        {stats.hasContent && (
-                          <div className="flex items-center gap-1">
-                            <Code className="h-3 w-3" />
-                            <span>Content</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Version Info */}
-                    {stats.activeVersion && (
-                      <div className="text-xs text-muted-foreground">
-                        <span className="font-medium">Active:</span>{' '}
-                        {stats.activeVersion.name}
-                        {stats.activeVersion.editor && (
-                          <span className="ml-2">
-                            • by {stats.activeVersion.editor}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-
-            {filteredAndSortedTemplates.length === 0 && (
-              <div className="text-center py-8">
-                <div className="inline-flex items-center justify-center w-12 h-12 bg-muted rounded-full mb-3">
-                  <Search className="h-6 w-6 text-muted-foreground" />
-                </div>
-                <h4 className="font-medium mb-1">No templates found</h4>
-                <p className="text-sm text-muted-foreground">
-                  Try adjusting your search or filter criteria
+          <div className="px-2 pb-4 pt-2">
+            {listIsEmpty && (
+              <div className="flex h-40 flex-col items-center justify-center rounded-md border border-dashed border-sidebar-border/60 bg-sidebar/40 text-center">
+                <Mail className="mb-3 h-8 w-8 text-sidebar-foreground/60" />
+                <p className="text-sm font-medium">No templates found</p>
+                <p className="text-xs text-sidebar-foreground/70">
+                  We couldn&apos;t find any templates in your SendGrid account.
                 </p>
               </div>
             )}
+
+            {noMatches && (
+              <div className="flex h-40 flex-col items-center justify-center rounded-md border border-dashed border-sidebar-border/60 bg-sidebar/40 text-center">
+                <Search className="mb-3 h-8 w-8 text-sidebar-foreground/60" />
+                <p className="text-sm font-medium">No matches</p>
+                <p className="text-xs text-sidebar-foreground/70">
+                  Try adjusting your filters or search query.
+                </p>
+              </div>
+            )}
+
+            {!listIsEmpty && !noMatches && (
+              <SidebarMenu>
+                {filteredAndSortedTemplates.map((template) => {
+                  const stats = getTemplateStats(template);
+                  const isSelected = selectedTemplate?.id === template.id;
+                  const truncatedName =
+                    template.name.length > MAX_TITLE_LENGTH
+                      ? `${template.name.slice(0, MAX_TITLE_LENGTH)}…`
+                      : template.name;
+
+                  return (
+                    <SidebarMenuItem key={template.id}>
+                      <SidebarMenuButton
+                        isActive={isSelected}
+                        onClick={() => setSelectedTemplate(template)}
+                        className="items-start gap-3 overflow-hidden"
+                        aria-label={`Select template ${template.name}`}
+                      >
+                        <FileText className="mt-1 h-4 w-4 text-sidebar-foreground/70" />
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="line-clamp-2 whitespace-normal text-sm font-medium leading-5 break-words">
+                              {truncatedName}
+                            </span>
+                          </div>
+
+                          <p className="line-clamp-2 text-xs text-sidebar-foreground/70">
+                            {stats.activeVersion?.subject ||
+                              'No subject available'}
+                          </p>
+
+                          <div className="flex flex-wrap items-center gap-3 text-[11px] text-sidebar-foreground/60">
+                            <span className="inline-flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              {formatDate(template.updated_at)}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <Layers className="h-3 w-3" />
+                              {stats.totalVersions} versions
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <CheckCircle className="h-3 w-3" />
+                              {stats.hasContent ? 'Has HTML' : 'No HTML'}
+                            </span>
+                          </div>
+                        </div>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            )}
           </div>
         </ScrollArea>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

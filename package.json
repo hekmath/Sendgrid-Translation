@@ -1,7 +1,8 @@
 {
-  "name": "my-v0-project",
+  "name": "unsend",
   "version": "0.1.0",
   "private": true,
+  "author": "Hekmat Hamidi",
   "scripts": {
     "build": "next build",
     "dev": "next dev",
