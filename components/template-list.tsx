@@ -165,10 +165,6 @@ export function TemplateList({ templates }: TemplateListProps) {
     });
   }, []);
 
-  const getGenerationColor = useCallback((generation: string) => {
-    return generation === 'dynamic' ? 'default' : 'secondary';
-  }, []);
-
   const templateCounts = useMemo(() => {
     const total = templates.length;
     const legacy = templates.filter(

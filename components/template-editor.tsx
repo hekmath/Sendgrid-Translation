@@ -27,8 +27,9 @@ export function TemplateEditor() {
   const { selectedTemplate } = useTemplateManager();
   const template = selectedTemplate;
 
-  const [activeVersion, setActiveVersion] =
-    useState<SendGridTemplate['versions'][number] | null>(null);
+  const [activeVersion, setActiveVersion] = useState<
+    SendGridTemplate['versions'][number] | null
+  >(null);
   const [testData, setTestData] = useState<ParsedTestData>({});
   const [activeTab, setActiveTab] = useState('preview');
   const [selectedTranslation, setSelectedTranslation] =
@@ -120,10 +121,6 @@ export function TemplateEditor() {
     return `Sample ${variable}`;
   }, []);
 
-  const handleTestDataChange = useCallback((newData: ParsedTestData) => {
-    setTestData(newData);
-  }, []);
-
   const handleVersionChange = useCallback(
     (versionId: string) => {
       if (!template) return;
@@ -173,7 +170,8 @@ export function TemplateEditor() {
           </div>
           <h3 className="text-lg font-semibold mb-2">Select a Template</h3>
           <p className="text-muted-foreground">
-            Choose a template from the list to load its versions and translations.
+            Choose a template from the list to load its versions and
+            translations.
           </p>
         </div>
       </div>
