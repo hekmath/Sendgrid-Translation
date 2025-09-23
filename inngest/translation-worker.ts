@@ -150,7 +150,7 @@ Translate the email template from English to ${targetLanguage.name} (${targetLan
 
   try {
     const translationResult = await generateObject({
-      model: openai('gpt-5-mini'),
+      model: openai('gpt-5'),
       system: systemPrompt,
       prompt: `Translate this SendGrid email template:
 
